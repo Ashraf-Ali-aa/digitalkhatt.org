@@ -17,6 +17,7 @@
   },
   "private": true,
   "dependencies": {
+    "@digitalkhatt/quran-engine": "workspace:*",
     "@angular/animations": "19.2.2",
     "@angular/common": "^19.2.2",
     "@angular/compiler": "^19.2.2",
@@ -32,7 +33,7 @@
     "@angular/material": "^19.2.3",
     "@angular/service-worker": "19.2.2",
     "cbor-web": "8.1.0",
-    "harfbuzzjs": "0.4.5",
+    "harfbuzzjs": "0.4.15",
     "lz-string": "1.5.0",
     "file-saver-es": "2.0.5",
     "json-diff-ts": "4.1.0",

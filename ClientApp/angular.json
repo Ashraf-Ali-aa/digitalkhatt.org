@@ -22,6 +22,7 @@
               "zone.js"
             ],
             "tsConfig": "tsconfig.app.json",
+            "externalDependencies": ["fs", "path", "os"],
             "assets": [
               "src/assets",
               "src/manifest.webmanifest",
