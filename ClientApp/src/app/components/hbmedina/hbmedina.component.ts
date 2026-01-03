@@ -24,104 +24,39 @@ import { TemplatePortal } from '@angular/cdk/portal';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { auditTime, startWith } from 'rxjs/operators';
 import { SidebarContentsService } from '../../services/navigation/sidebarcontents';
-//import { ScrollDispatcher, CdkScrollable } from '@angular/cdk/scrolling';
 
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { PageView } from './page_view';
-
-//import * as Hammer from 'hammerjs';
 
 import { CdkDrag, DragRef, Point } from '@angular/cdk/drag-drop';
 import { CdkScrollable, ScrollDispatcher } from '@angular/cdk/scrolling';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { AboutComponent } from '../about/about.component';
-import { RenderingStates } from './rendering_states';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { loadAndCacheFont, loadHarfbuzz, harfbuzzFonts, HarfBuzzFont } from "@digitalkhatt/quran-engine"
+import {
+  loadAndCacheFont,
+  loadHarfbuzz,
+  harfbuzzFonts,
+  RenderingStates,
+  PageViewBuffer,
+  DEFAULT_CACHE_SIZE,
+  SVGPageRenderer,
+  PageViewer,
+  JustStyleEnum,
+  MushafLayoutTypeEnum,
+  type PageFormat,
+  type PageViewerRenderOptions,
+  type VerseNumberFormat,
+} from "@digitalkhatt/quran-engine"
 import { MushafLayoutType, NewMadinahQuranTextService, OldMadinahQuranTextService, QuranTextIndopak15Service, QuranTextService, MUSHAFLAYOUTTYPE } from '../../services/qurantext.service';
 import { TajweedService } from '../../services/tajweed.service';
 import { saveAs } from 'file-saver-es';
 import { commonModules } from '../../app.config';
 
 
-const CSS_UNITS = 96.0 / 72.0;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 10.0;
 const DEFAULT_SCALE_DELTA = 1.1;
-const MAX_AUTO_SCALE = 1.25;
-
-export interface PageFormat {
-  width: number,
-  height: number,
-  fontSize: number
-}
-
-function reviver(key: any, value: any) {
-  if (typeof value === 'object' && value !== null) {
-    if (value.dataType === 'Map') {
-      return new Map(value.value);
-    }
-  }
-  return value;
-}
-
-class PDFPageViewBuffer {
-
-  private data = [];
-  constructor(private size) {
-  }
-
-  push(view) {
-    let i = this.data.indexOf(view);
-    if (i >= 0) {
-      this.data.splice(i, 1);
-    }
-    this.data.push(view);
-    if (this.data.length > this.size) {
-      this.data.shift().destroy();
-    }
-  };
-  resize(newSize, pagesToKeep) {
-    this.size = newSize;
-    if (pagesToKeep) {
-      const pageIdsToKeep = new Set();
-      for (let i = 0, iMax = pagesToKeep.length; i < iMax; ++i) {
-        pageIdsToKeep.add(pagesToKeep[i].id);
-      }
-      this.moveToEndOfArray(this.data, function (page) {
-        return pageIdsToKeep.has(page.id);
-      });
-    }
-    while (this.data.length > this.size) {
-      this.data.shift().destroy();
-    }
-  };
-
-  reset() {
-    while (this.data.length > 0) {
-      this.data.shift().destroy();
-    }
-  }
-
-  private moveToEndOfArray(arr, condition) {
-    const moved = [], len = arr.length;
-    let write = 0;
-    for (let read = 0; read < len; ++read) {
-      if (condition(arr[read])) {
-        moved.push(arr[read]);
-      } else {
-        arr[write] = arr[read];
-        ++write;
-      }
-    }
-    for (let read = 0; write < len; ++read, ++write) {
-      arr[write] = moved[read];
-    }
-  }
-}
-
-const DEFAULT_CACHE_SIZE = 10;
 
 @Component({
   selector: 'app-medina-component',
@@ -144,12 +79,14 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
 
   fontsize;
-  highestPriorityPage: PageView;
+  highestPriorityPage: PageViewer | null = null;
 
   hasFloatingToc: boolean = false;
   isOpened: boolean = false;
   private quranTextService: QuranTextService
 
+  // SVG page renderer from quran-engine
+  private svgPageRenderer: SVGPageRenderer | null = null;
 
   scale;
   viewport: PageFormat;
@@ -159,8 +96,8 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
   pages = [];
   scrollingSubscription: Subscription;
   itemSize;
-  buffer: PDFPageViewBuffer = new PDFPageViewBuffer(DEFAULT_CACHE_SIZE);
-  views: PageView[] = [];
+  buffer: PageViewBuffer<PageViewer> = new PageViewBuffer<PageViewer>(DEFAULT_CACHE_SIZE);
+  views: PageViewer[] = [];
   outline: any = [];
 
   static DEFAULT_SCALE = 15 / 1000
@@ -388,11 +325,29 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.setViewport(this.getScale(this.zoomCtrl.value), false);
 
+          // Create SVGPageRenderer from quran-engine
+          const font = harfbuzzFonts.get("oldmadina");
+          // Map Angular MushafLayoutType to quran-engine MushafLayoutTypeEnum
+          const engineMushafType = this.mushafType === MushafLayoutType.OldMadinah ? MushafLayoutTypeEnum.OldMadinah
+            : this.mushafType === MushafLayoutType.IndoPak15Lines ? MushafLayoutTypeEnum.IndoPak15Lines
+            : MushafLayoutTypeEnum.NewMadinah;
+
+          this.svgPageRenderer = new SVGPageRenderer({
+            font,
+            textService: this.quranTextService,
+            mushafType: engineMushafType,
+          });
+
+          // Create PageViewer instances for each page
           this.pageElements.forEach((page, index) => {
-            //this.views[index] = new PageView(page.nativeElement, index, this.quranService, this.viewport, this.renderingQueue);
-            this.views[index] = new PageView(page.nativeElement, index,
-              this.calculatewidthElem.nativeElement, this.lineJustify.nativeElement,
-              this.viewport, this.tajweedService, this.quranTextService);
+            this.views[index] = new PageViewer({
+              pageIndex: index,
+              container: page.nativeElement,
+              viewport: this.viewport,
+              renderer: this.svgPageRenderer!,
+              rendererType: 'svg',
+              lineJustifyElement: this.lineJustify.nativeElement,
+            });
           });
 
           this.scrollState = {
@@ -659,7 +614,7 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
     let pageIndex = (this.visibleViews.first.id - 1) || 0;
 
-    var element = this.views[pageIndex].div;
+    var element = this.views[pageIndex].container;
 
     var displY = event.clientY - 48;
     var displX = event.clientX;
@@ -734,7 +689,7 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
     let pageIndex = (this.visibleViews.first.id - 1) || 0;
 
-    var element = this.views[pageIndex].div;
+    var element = this.views[pageIndex].container;
 
     const top = this.firstMyCustomDirective.measureScrollOffset('top'), bottom = top + this.viewAreaElement.clientHeight;
     const left = this.firstMyCustomDirective.measureScrollOffset('start'), right = left + this.viewAreaElement.clientWidth;
@@ -826,16 +781,14 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
     if (pageView) {
       this.buffer.push(pageView);
       this.renderView(pageView,
-        this.canvasWidth, this.canvasHeight,
-        this.texFormat,
         this.tajweedColorCtrl.value,
-        this.verseNumberFormatCtrl.value);
+        this.verseNumberFormatCtrl.value as VerseNumberFormat);
       return true;
     }
     return false;
   }
 
-  renderView(view: PageView, canvasWidth, canvasHeight, texFormat, tajweedColor, verseNumberFormat: string) {
+  renderView(view: PageViewer, tajweedColor: boolean, verseNumberFormat: VerseNumberFormat) {
     const oldHigh = this.highestPriorityPage;
     switch (view.renderingState) {
       case RenderingStates.FINISHED:
@@ -849,8 +802,21 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
         break;
       case RenderingStates.INITIAL:
         this.highestPriorityPage = view;
-        view.draw(canvasWidth, canvasHeight, texFormat, tajweedColor, verseNumberFormat)
-          .catch(error => {
+        // Get the aya SVG group element for verse number frames
+        const svgAyaElem = document.getElementById("ayaGlyph") as unknown as SVGSVGElement | null;
+        const ayaSvgGroup = svgAyaElem?.firstElementChild as SVGGElement | undefined;
+
+        // Create render options for PageViewer
+        const renderOptions: PageViewerRenderOptions = {
+          tajweedEnabled: tajweedColor,
+          verseNumberFormat,
+          justStyle: JustStyleEnum.XScale,
+          ayaSvgGroup,
+          applyTajweed: (pageIndex: number) => this.tajweedService.applyTajweedByPage(this.quranTextService, pageIndex),
+        };
+
+        view.draw(renderOptions)
+          .catch((error: Error) => {
             console.log(error)
           })
           .finally(() => {
@@ -883,7 +849,7 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
     let visible = [];
     for (let currIndex = firstVisibleIndex; currIndex <= lastVisibleIndex; currIndex++) {
-      const view = this.views[currIndex], element = view.div;
+      const view = this.views[currIndex], element = view.container;
       const currentWidth = element.offsetLeft + element.clientLeft;
       const currentHeight = element.offsetTop + element.clientTop;
       const viewWidth = element.clientWidth, viewHeight = element.clientHeight;
