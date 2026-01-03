@@ -1,14 +1,37 @@
 /*
  * Copyright 2012 Mozilla Foundation (Some code is derived from https://github.com/mozilla/pdf.js/blob/master/web/pdf_page_view.js)
- * Copyright (c) 2019-2020 Amine Anane. http: //digitalkhatt/license  
+ * Copyright (c) 2019-2020 Amine Anane. http: //digitalkhatt/license
 */
 import { MushafLayoutType, QuranTextService } from "../../services/qurantext.service";
 import { TajweedService } from "../../services/tajweed.service";
-import { HBFeature, hb as HarfBuzz, HarfBuzzBuffer, HarfBuzzFont, getWidth, harfbuzzFonts } from "./harfbuzz";
+import {
+  HarfBuzzBuffer,
+  HarfBuzzFont,
+  getWidth,
+  harfbuzzFonts,
+  getArabLanguage,
+  getArabScript,
+  FONTSIZE,
+  INTERLINE,
+  MARGIN,
+  PAGE_WIDTH,
+  analyzeLineForJust,
+  justifyLine,
+  SpaceType,
+  SVGLineRenderer,
+} from '@digitalkhatt/quran-engine';
+import type { HBFeature, JustResultByLine, LineTextInfo, JustStyle } from '@digitalkhatt/quran-engine';
 import { PageFormat } from './hbmedina.component';
-import { FONTSIZE, INTERLINE, JustResultByLine, JustStyle, LineTextInfo, MARGIN, PAGE_WIDTH, SpaceType, analyzeLineForJust, justifyLine } from './just.service';
 
 import { RenderingStates } from './rendering_states';
+
+// JustStyle enum values
+const JustStyleEnum = {
+  SameSizeByPage: 0,
+  XScale: 1,
+  XScaleOnly: 2,
+  SCLXAxis: 3,
+} as const;
 
 
 class PageView {
@@ -30,7 +53,7 @@ class PageView {
   private ayaSvgGroup: SVGGElement
   private ayaLength: number;
   private spaceWidth;
-  private justStyle = JustStyle.XScale
+  private justStyle: JustStyle = JustStyleEnum.XScale
   constructor(public div, private pageIndex, calculatewidthElem, lineJustify, viewport,
     private tajweedService: TajweedService, private quranTextService: QuranTextService) {
     this.renderingState = RenderingStates.INITIAL;
@@ -174,10 +197,10 @@ class PageView {
 
         let fontSizeRatio = 1;
 
-        if (this.justStyle === JustStyle.SameSizeByPage) {
+        if (this.justStyle === JustStyleEnum.SameSizeByPage) {
           fontSizeRatio = Math.min(minRatio, 1);
         } else {
-          fontSizeRatio = 1; // Math.min(fontSizeRatio[lineIndex], meanRatio);            
+          fontSizeRatio = 1; // Math.min(fontSizeRatio[lineIndex], meanRatio);
         }
 
         //console.log(`page=${this.pageIndex + 1} minRatio=${minRatio} maxRatio=${maxRatio} meanRatio=${meanRatio} fontSizeRatio=${fontSizeRatio[lineIndex]} fontRatio=${fontSizeRatio} %=${((fontSizeRatio / minRatio) - 1) * 100}%`)
@@ -292,14 +315,14 @@ class PageView {
       }
     }
 
-    if (justResult.xScale !== 1 && this.justStyle === JustStyle.SCLXAxis) {
+    if (justResult.xScale !== 1 && this.justStyle === JustStyleEnum.SCLXAxis) {
       //this.oldMedinaFont.setScale(1000 * justResult.xScale, 1000 * justResult.xScale);
     }
 
     const buffer = new HarfBuzzBuffer()
     buffer.setDirection('rtl')
-    buffer.setLanguage(HarfBuzz.arabLanguage)
-    buffer.setScript(HarfBuzz.arabScript)
+    buffer.setLanguage(getArabLanguage())
+    buffer.setScript(getArabScript())
     buffer.setClusterLevel(1)
     buffer.addText(lineText)
     buffer.shape(this.oldMedinaFont, features)
@@ -446,9 +469,9 @@ class PageView {
       lineGroup.appendChild(line)
     }
 
-    const xScale = this.justStyle === JustStyle.SCLXAxis ? fontSizeRatio : fontSizeRatio * justResult.xScale;
+    const xScale = this.justStyle === JustStyleEnum.SCLXAxis ? fontSizeRatio : fontSizeRatio * justResult.xScale;
 
-    const yScale = this.justStyle === JustStyle.SameSizeByPage ? xScale : 1;
+    const yScale = this.justStyle === JustStyleEnum.SameSizeByPage ? xScale : 1;
 
     //console.log(`page=${this.pageIndex + 1} line=${lineIndex + 1} xScale=${xScale} yScale=${yScale} fontSizeRatio=${fontSizeRatio}`)
 

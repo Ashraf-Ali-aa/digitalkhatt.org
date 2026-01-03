@@ -1,14 +1,36 @@
 /*
  * Copyright 2012 Mozilla Foundation (Some code is derived from https://github.com/mozilla/pdf.js/blob/master/web/pdf_page_view.js)
- * Copyright (c) 2019-2020 Amine Anane. http: //digitalkhatt/license  
+ * Copyright (c) 2019-2020 Amine Anane. http: //digitalkhatt/license
 */
 import { MushafLayoutType, QuranTextService } from "../../services/qurantext.service";
 import { TajweedService } from "../../services/tajweed.service";
-import { HBFeature, hb as HarfBuzz, HarfBuzzBuffer, HarfBuzzFont, getWidth, harfbuzzFonts } from "./harfbuzz";
-import { FONTSIZE, INTERLINE, JustResultByLine, JustStyle, LineTextInfo, MARGIN, PAGE_WIDTH, SpaceType, analyzeLineForJust, justifyLine } from './just.service';
+import {
+  HarfBuzzBuffer,
+  HarfBuzzFont,
+  getWidth,
+  harfbuzzFonts,
+  getArabLanguage,
+  getArabScript,
+  FONTSIZE,
+  INTERLINE,
+  MARGIN,
+  PAGE_WIDTH,
+  analyzeLineForJust,
+  justifyLine,
+  SpaceType,
+} from '@digitalkhatt/quran-engine';
+import type { HBFeature, JustResultByLine, LineTextInfo, JustStyle } from '@digitalkhatt/quran-engine';
 import { PageFormat } from "./otfmushaf.component";
 
 import { RenderingStates } from './rendering_states';
+
+// JustStyle enum values
+const JustStyleEnum = {
+  SameSizeByPage: 0,
+  XScale: 1,
+  XScaleOnly: 2,
+  SCLXAxis: 3,
+} as const;
 
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
@@ -31,7 +53,7 @@ class PageView {
   private ayaSvgGroup: SVGGElement
   private ayaLength: number;
   private spaceWidth;
-  private justStyle = JustStyle.XScale
+  private justStyle: JustStyle = JustStyleEnum.XScale
   constructor(public div, private pageIndex, calculatewidthElem, lineJustify, viewport,
     private tajweedService: TajweedService, private quranTextService: QuranTextService) {
     this.renderingState = RenderingStates.INITIAL;

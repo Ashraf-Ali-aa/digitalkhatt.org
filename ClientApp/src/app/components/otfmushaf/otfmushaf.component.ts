@@ -20,7 +20,7 @@ import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from 
 import { AboutComponent } from '../about/about.component';
 import { RenderingStates } from './rendering_states';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { loadAndCacheFont, loadHarfbuzz, harfbuzzFonts, HarfBuzzFont } from "./harfbuzz"
+import { loadAndCacheFont, loadHarfbuzz, harfbuzzFonts, HarfBuzzFont } from "@digitalkhatt/quran-engine"
 import { MushafLayoutType, NewMadinahQuranTextService, OldMadinahQuranTextService, QuranTextIndopak15Service, QuranTextService, MUSHAFLAYOUTTYPE } from '../../services/qurantext.service';
 import { TajweedService } from '../../services/tajweed.service';
 import { saveAs } from 'file-saver-es';
