@@ -394,3 +394,18 @@ html[dir='rtl'] #viewerContainer {
 .sidenav {
   width: 180px;
 }
+
+// Verse number format toggle styling
+::ng-deep .verse-number-toggle {
+  height: 32px;
+
+  .mat-button-toggle {
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .mat-button-toggle-label-content {
+    line-height: 32px !important;
+    padding: 0 8px !important;
+  }
+}

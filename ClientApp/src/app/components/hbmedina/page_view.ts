@@ -33,6 +33,16 @@ const JustStyleEnum = {
   SCLXAxis: 3,
 } as const;
 
+// Arabic-Indic numerals to Western Arabic numerals conversion
+const arabicIndicToWestern: { [key: string]: string } = {
+  '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+  '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+};
+
+function convertArabicToEnglishNumber(text: string): string {
+  return text.replace(/[٠-٩]/g, (char) => arabicIndicToWestern[char] || char);
+}
+
 
 class PageView {
   renderingState: RenderingStates;
@@ -111,7 +121,7 @@ class PageView {
     return this.renderingState === RenderingStates.PAUSED
   }
 
-  async draw(canvasWidth, canvasHeight, texFormat, tajweedColor) {
+  async draw(canvasWidth, canvasHeight, texFormat, tajweedColor, verseNumberFormat: string = 'arabic') {
 
     let startDraw = performance.now();
 
@@ -212,7 +222,7 @@ class PageView {
           this.justStyle)
 
 
-        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale, fontSizeRatio)
+        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale, fontSizeRatio, false, verseNumberFormat)
 
       } else if (lineInfo.lineType === 1) {
         lineElem.style.textAlign = "center"
@@ -245,7 +255,7 @@ class PageView {
           ayaSpacing: this.spaceWidth,
           xScale: 1
         }
-        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale * 0.9, 1, true)
+        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale * 0.9, 1, true, verseNumberFormat)
       }
 
       temp.appendChild(lineElem);
@@ -277,7 +287,7 @@ class PageView {
 
   }
 
-  renderLine(lineElem: HTMLDivElement, lineIndex, lineTextInfo: LineTextInfo, justResult: JustResultByLine, tajweedResult: Map<number, string>, glyphScale: number, fontSizeRatio: number, center: boolean = false) {
+  renderLine(lineElem: HTMLDivElement, lineIndex, lineTextInfo: LineTextInfo, justResult: JustResultByLine, tajweedResult: Map<number, string>, glyphScale: number, fontSizeRatio: number, center: boolean = false, verseNumberFormat: string = 'arabic') {
 
     const lineText = this.quranText[this.pageIndex][lineIndex]
 
@@ -391,7 +401,9 @@ class PageView {
       }
 
       if (pathString) {
-        if (typeof pathString !== 'string') {
+        const isAyaNumber = typeof pathString !== 'string';
+
+        if (isAyaNumber) {
           //Aya
 
           if (this.ayaSvgGroup) {
@@ -401,6 +413,85 @@ class PageView {
             lineGroup.appendChild(ayaGroup);
           }
 
+          // If English number format, render text instead of Arabic glyph path
+          if (verseNumberFormat === 'english') {
+            // Extract verse number from the text (characters after 0x06DD until next non-digit)
+            let verseNumStr = '';
+            for (let i = glyph.Cluster + 1; i < lineText.length; i++) {
+              const char = lineText[i];
+              if (char >= '٠' && char <= '٩') {
+                verseNumStr += char;
+              } else {
+                break;
+              }
+            }
+            const englishNum = convertArabicToEnglishNumber(verseNumStr);
+
+            // For IndoPak (ayaLength === 0), render the frame glyph then overlay with white circle + English number
+            // For other styles, the frame is already rendered from ayaSvgGroup above
+            if (this.ayaLength === 0) {
+              // IndoPak: render the full glyph path first (contains frame + Arabic numbers)
+              const fullPath = pathString[0];
+              if (fullPath) {
+                let framePath = document.createElementNS('http://www.w3.org/2000/svg', "path");
+                framePath.setAttribute("d", fullPath);
+                framePath.setAttribute("transform", "translate(" + (currentxPos + glyph.XOffset) + " " + glyph.YOffset + ")");
+                lineGroup.appendChild(framePath);
+              }
+            }
+
+            // Position and size based on mushaf type
+            let fontSize: number;
+            let xCenter: number;
+            let yCenter: number;
+            let circleRadius: number = 0;
+
+            // Scale font size based on number of digits - subtle scaling to fit 3 digits
+            const digitCount = englishNum.length;
+            let fontSizeScale = 1;
+            if (digitCount === 2) {
+              fontSizeScale = 0.95;
+            } else if (digitCount >= 3) {
+              fontSizeScale = 0.70;
+            }
+
+            if (this.quranTextService.mushafType === MushafLayoutType.OldMadinah) {
+              fontSize = 500 * fontSizeScale;
+              xCenter = currentxPos + glyph.XOffset + 586;
+              yCenter = 230;
+            } else if (this.quranTextService.mushafType === MushafLayoutType.NewMadinah) {
+              fontSize = 400 * fontSizeScale;
+              xCenter = currentxPos + glyph.XOffset + 435;
+              yCenter = 250;
+            } else {
+              // IndoPak: smaller font and add white circle background to cover Arabic text
+              fontSize = 350 * fontSizeScale;
+              xCenter = currentxPos + glyph.XOffset + (glyph.XAdvance / 2);
+              yCenter = 200;
+              circleRadius = 240; // White circle to cover Arabic numbers
+
+              // Add white circle background to cover Arabic numbers
+              const circle = document.createElementNS('http://www.w3.org/2000/svg', "circle");
+              circle.setAttribute("cx", xCenter.toString());
+              circle.setAttribute("cy", yCenter.toString());
+              circle.setAttribute("r", circleRadius.toString());
+              circle.setAttribute("fill", "white");
+              lineGroup.appendChild(circle);
+            }
+
+            // Create text element for English number
+            const textElem = document.createElementNS('http://www.w3.org/2000/svg', "text");
+            textElem.textContent = englishNum;
+            textElem.setAttribute("font-family", "Arial, sans-serif");
+            textElem.setAttribute("font-weight", "bold");
+            textElem.setAttribute("text-anchor", "middle");
+            textElem.setAttribute("dominant-baseline", "middle");
+            textElem.setAttribute("font-size", fontSize.toString());
+            textElem.setAttribute("transform", "translate(" + xCenter + " " + yCenter + ") scale(1, -1)");
+
+            lineGroup.appendChild(textElem);
+            continue; // Skip rendering the Arabic number glyph path
+          }
 
           pathString = pathString[0]
 

@@ -109,6 +109,11 @@
         </mat-select>
 
         <mat-slide-toggle [formControl]="tajweedColorCtrl" style="margin-left: 20px;" class="hiddenSmallView">Tajweed</mat-slide-toggle>
+
+        <mat-button-toggle-group [formControl]="verseNumberFormatCtrl" style="margin-left: 20px;" class="hiddenSmallView verse-number-toggle">
+          <mat-button-toggle value="arabic" title="Arabic numerals">١٢٣</mat-button-toggle>
+          <mat-button-toggle value="english" title="English numerals">123</mat-button-toggle>
+        </mat-button-toggle-group>
       </form>
     </div>
     <div class="rightnav">
@@ -136,6 +141,11 @@
         <!-- Mobile tajweed toggle -->
         <button mat-icon-button (click)="tajweedColorCtrl.setValue(!tajweedColorCtrl.value)" title="Toggle Tajweed" class="showSmallView">
           <mat-icon [style.color]="tajweedColorCtrl.value ? '#00A650' : ''">palette</mat-icon>
+        </button>
+
+        <!-- Mobile verse number format toggle -->
+        <button mat-icon-button (click)="verseNumberFormatCtrl.setValue(verseNumberFormatCtrl.value === 'arabic' ? 'english' : 'arabic')" title="Toggle verse number format" class="showSmallView">
+          <span style="font-weight: bold; font-size: 14px;">{{verseNumberFormatCtrl.value === 'arabic' ? '١٢٣' : '123'}}</span>
         </button>
 
         <button *ngIf="debug" mat-icon-button [matMenuTriggerFor]="menu" title="Format">

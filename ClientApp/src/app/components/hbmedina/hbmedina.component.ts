@@ -209,6 +209,7 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
   tajweedColorCtrl: UntypedFormControl;
   fontScaleCtrl: UntypedFormControl;
   mushafStyleCtrl: UntypedFormControl;
+  verseNumberFormatCtrl: UntypedFormControl;
   fontScale = 1;
   visibleViews;
   loaded: boolean = false;
@@ -282,6 +283,10 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
     this.zoomCtrl = new UntypedFormControl('page-fit');
     this.tajweedColorCtrl = new UntypedFormControl(true);
     this.fontScaleCtrl = new UntypedFormControl(this.fontScale);
+
+    // Initialize verse number format from localStorage, default to 'arabic'
+    const savedVerseNumberFormat = localStorage.getItem('verseNumberFormat') || 'arabic';
+    this.verseNumberFormatCtrl = new UntypedFormControl(savedVerseNumberFormat);
 
     // Initialize mushaf style based on current layout type
     let currentStyle = 'newmedina';
@@ -430,6 +435,14 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.tajweedColorCtrl.valueChanges.subscribe(value => {
 
+            this.ngZone.runOutsideAngular(() => {
+              this.buffer.reset();
+              this.update();
+            });
+          });
+
+          this.verseNumberFormatCtrl.valueChanges.subscribe(value => {
+            localStorage.setItem('verseNumberFormat', value);
             this.ngZone.runOutsideAngular(() => {
               this.buffer.reset();
               this.update();
@@ -815,13 +828,14 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
       this.renderView(pageView,
         this.canvasWidth, this.canvasHeight,
         this.texFormat,
-        this.tajweedColorCtrl.value);
+        this.tajweedColorCtrl.value,
+        this.verseNumberFormatCtrl.value);
       return true;
     }
     return false;
   }
 
-  renderView(view: PageView, canvasWidth, canvasHeight, texFormat, tajweedColor) {
+  renderView(view: PageView, canvasWidth, canvasHeight, texFormat, tajweedColor, verseNumberFormat: string) {
     const oldHigh = this.highestPriorityPage;
     switch (view.renderingState) {
       case RenderingStates.FINISHED:
@@ -835,12 +849,12 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
         break;
       case RenderingStates.INITIAL:
         this.highestPriorityPage = view;
-        view.draw(canvasWidth, canvasHeight, texFormat, tajweedColor)
+        view.draw(canvasWidth, canvasHeight, texFormat, tajweedColor, verseNumberFormat)
           .catch(error => {
             console.log(error)
           })
           .finally(() => {
-            // console.log("Finish rendering view " + view.id + " state=" + view.renderingState)          
+            // console.log("Finish rendering view " + view.id + " state=" + view.renderingState)
             this.forceRendering(null)
           });
         break;
