@@ -8,6 +8,17 @@
   }
 }
 
+// Show only on small screens (opposite of hiddenSmallView)
+::ng-deep .showSmallView {
+  display: none !important;
+}
+
+@media all and (max-width: 535px) {
+  ::ng-deep .showSmallView {
+    display: inline-flex !important;
+  }
+}
+
 @media all and (max-width: 770px) {
   ::ng-deep .hiddenMediumView {
     display: none !important;

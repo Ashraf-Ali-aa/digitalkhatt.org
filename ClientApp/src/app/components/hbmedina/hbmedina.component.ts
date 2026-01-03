@@ -208,6 +208,7 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
   isJustifiedCtrl: UntypedFormControl;
   tajweedColorCtrl: UntypedFormControl;
   fontScaleCtrl: UntypedFormControl;
+  mushafStyleCtrl: UntypedFormControl;
   fontScale = 1;
   visibleViews;
   loaded: boolean = false;
@@ -280,7 +281,24 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isJustifiedCtrl = new UntypedFormControl(true);
     this.zoomCtrl = new UntypedFormControl('page-fit');
     this.tajweedColorCtrl = new UntypedFormControl(true);
-    this.fontScaleCtrl = new UntypedFormControl(this.fontScale)
+    this.fontScaleCtrl = new UntypedFormControl(this.fontScale);
+
+    // Initialize mushaf style based on current layout type
+    let currentStyle = 'newmedina';
+    switch (mushafLayoutType) {
+      case MushafLayoutType.OldMadinah:
+        currentStyle = 'oldmedina';
+        break;
+      case MushafLayoutType.IndoPak15Lines:
+        currentStyle = 'indopak15';
+        break;
+    }
+    this.mushafStyleCtrl = new UntypedFormControl(currentStyle);
+
+    // Subscribe to style changes for navigation
+    this.mushafStyleCtrl.valueChanges.subscribe(value => {
+      this.navigateToMushafStyle(value);
+    });
 
     this.currentPageNumber = this.form.controls['currentPageNumber'].value;
 
@@ -1170,7 +1188,20 @@ export class HBMedinaComponent implements OnInit, AfterViewInit, OnDestroy {
     if (layoutIndex === 3) {
       this.router.navigate(['/hb/indopak15'])
     }
+  }
 
+  navigateToMushafStyle(style: string) {
+    const routes: { [key: string]: string } = {
+      'newmedina': '/hb/newmedina',
+      'oldmedina': '/hb/oldmedina',
+      'indopak15': '/hb/indopak15'
+    };
+
+    const route = routes[style];
+    if (route) {
+      // Force full page reload to reinitialize fonts and text services
+      window.location.href = route;
+    }
   }
 }
 
