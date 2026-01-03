@@ -212,7 +212,7 @@ class PageView {
           this.justStyle)
 
 
-        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale, fontSizeRatio, defaultMargin)
+        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale, fontSizeRatio)
 
       } else if (lineInfo.lineType === 1) {
         lineElem.style.textAlign = "center"
@@ -245,7 +245,7 @@ class PageView {
           ayaSpacing: this.spaceWidth,
           xScale: 1
         }
-        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale * 0.9, 1, defaultMargin, true)
+        this.renderLine(lineElem, lineIndex, lineTextInfo, justResult, tajweedResult?.[lineIndex], glyphScale * 0.9, 1, true)
       }
 
       temp.appendChild(lineElem);
@@ -277,7 +277,7 @@ class PageView {
 
   }
 
-  renderLine(lineElem: HTMLDivElement, lineIndex, lineTextInfo: LineTextInfo, justResult: JustResultByLine, tajweedResult: Map<number, string>, glyphScale: number, fontSizeRatio: number, margin: number, center: boolean = false) {
+  renderLine(lineElem: HTMLDivElement, lineIndex, lineTextInfo: LineTextInfo, justResult: JustResultByLine, tajweedResult: Map<number, string>, glyphScale: number, fontSizeRatio: number, center: boolean = false) {
 
     const lineText = this.quranText[this.pageIndex][lineIndex]
 
@@ -479,26 +479,33 @@ class PageView {
     lineGroup.setAttribute("transform", "scale(" + glyphScale * xScale + "," + -glyphScale * yScale + ")");
 
     const lineWidth = -glyphScale * xScale * currentxPos
-    const x = lineWidth * 2
-    let width = x + margin;
+    const containerWidth = lineElem.clientWidth;
+    const containerHeight = lineElem.clientHeight;
 
+    // SVG pixel dimensions match the container
+    const svgWidth = containerWidth;
+    const svgHeight = containerHeight;
 
-    const height = lineElem.clientHeight * 2
+    // viewBox must be large enough to contain all glyphs
+    // Use the larger of containerWidth or lineWidth to prevent clipping
+    const viewBoxWidth = Math.max(containerWidth, lineWidth);
+    const viewBoxHeight = svgHeight;
 
+    // Glyphs are drawn RTL from x=0 going negative, so content spans from -lineWidth to 0
+    let viewBoxX = -lineWidth;
 
-
-    svg.setAttribute('viewBox', `${-x} ${-height / 2} ${width} ${height}`)
-    svg.setAttribute('width', width.toString());
-    svg.setAttribute('height', height.toString());
-    svg.style.position = "relative"
     if (center) {
-      const rightMargin = (lineElem.clientWidth - lineWidth) / 2 - margin;
-      svg.style.right = rightMargin + "px";
-    } else {
-      svg.style.right = -margin + "px";
+      // Center the text by shifting viewBox left
+      const centerOffset = (viewBoxWidth - lineWidth) / 2;
+      viewBoxX = -lineWidth - centerOffset;
     }
 
-    svg.style.top = -lineElem.clientHeight / 2 + "px";
+    svg.setAttribute('viewBox', `${viewBoxX} ${-viewBoxHeight / 2} ${viewBoxWidth} ${viewBoxHeight}`)
+    svg.setAttribute('width', svgWidth.toString());
+    svg.setAttribute('height', svgHeight.toString());
+    svg.style.position = "absolute";
+    svg.style.right = "0px";
+    svg.style.top = "0px";
 
     lineElem.appendChild(svg);
 
