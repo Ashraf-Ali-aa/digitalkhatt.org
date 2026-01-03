@@ -107,6 +107,8 @@
           <mat-option value="oldmedina" style="font-size: small;min-height:30px"><span>Old Madinah</span></mat-option>
           <mat-option value="indopak15" style="font-size: small;min-height:30px"><span>IndoPak 15-Line</span></mat-option>
         </mat-select>
+
+        <mat-slide-toggle [formControl]="tajweedColorCtrl" style="margin-left: 20px;" class="hiddenSmallView">Tajweed</mat-slide-toggle>
       </form>
     </div>
     <div class="rightnav">
@@ -130,6 +132,11 @@
             <span>IndoPak 15-Line</span>
           </button>
         </mat-menu>
+
+        <!-- Mobile tajweed toggle -->
+        <button mat-icon-button (click)="tajweedColorCtrl.setValue(!tajweedColorCtrl.value)" title="Toggle Tajweed" class="showSmallView">
+          <mat-icon [style.color]="tajweedColorCtrl.value ? '#00A650' : ''">palette</mat-icon>
+        </button>
 
         <button *ngIf="debug" mat-icon-button [matMenuTriggerFor]="menu" title="Format">
           <mat-icon>text_format</mat-icon>
