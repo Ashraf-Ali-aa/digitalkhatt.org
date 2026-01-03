@@ -1,0 +1,21 @@
+{
+  "name": "digitalkhatt-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm run --parallel --filter @digitalkhatt/quran-engine --filter digitalkhatt-react dev",
+    "dev:angular": "pnpm --filter @digitalkhatt/quran-engine dev & pnpm --filter digitalkhatt start",
+    "dev:react": "pnpm run --parallel --filter @digitalkhatt/quran-engine --filter digitalkhatt-react dev",
+    "dev:engine": "pnpm --filter @digitalkhatt/quran-engine dev",
+    "build": "pnpm --filter @digitalkhatt/quran-engine build && pnpm -r --filter=!@digitalkhatt/quran-engine build",
+    "build:angular": "pnpm --filter digitalkhatt build",
+    "build:react": "pnpm --filter digitalkhatt-react build",
+    "build:engine": "pnpm --filter @digitalkhatt/quran-engine build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  }
+}
