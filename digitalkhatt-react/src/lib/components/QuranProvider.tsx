@@ -8,6 +8,8 @@ import React, { createContext, useContext, useEffect, useState, useMemo, useCall
 import type { MushafLayoutType, LoadingStatus } from '../core/types';
 import { loadHarfbuzz, loadAndCacheFont, harfbuzzFonts, HarfBuzzFont } from '../core/harfbuzz';
 import { QuranTextService, createQuranTextService, loadQuranTextService } from '../core/quran-text';
+import type { VerseWordMapping } from '../core/verse-mapping';
+import { buildVerseMapping } from '../core/verse-mapping';
 
 // ============================================
 // Types
@@ -41,6 +43,8 @@ export interface DigitalKhattContextValue {
   getFont: (layoutType: MushafLayoutType) => HarfBuzzFont | null;
   /** Get text service for a mushaf layout type */
   getTextService: (layoutType: MushafLayoutType) => QuranTextService | null;
+  /** Get verse mapping for a mushaf layout type */
+  getVerseMapping: (layoutType: MushafLayoutType) => VerseWordMapping | null;
   /** Available layout types */
   availableLayouts: MushafLayoutType[];
 }
@@ -74,6 +78,7 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
   const [error, setError] = useState<Error | null>(null);
   const [loadedFonts, setLoadedFonts] = useState<Map<MushafLayoutType, HarfBuzzFont>>(new Map());
   const [textServices, setTextServices] = useState<Map<MushafLayoutType, QuranTextService>>(new Map());
+  const [verseMappings, setVerseMappings] = useState<Map<MushafLayoutType, VerseWordMapping>>(new Map());
   const [availableLayouts, setAvailableLayouts] = useState<MushafLayoutType[]>([]);
 
   // Initialize engine
@@ -139,6 +144,17 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
         if (cancelled) return;
 
         setTextServices(loadedTextServices);
+
+        // 4. Build verse mappings for each text service
+        const mappings = new Map<MushafLayoutType, VerseWordMapping>();
+        for (const [layoutType, service] of loadedTextServices) {
+          const mapping = buildVerseMapping(service);
+          mappings.set(layoutType, mapping);
+        }
+
+        if (cancelled) return;
+
+        setVerseMappings(mappings);
         setAvailableLayouts(loadedLayouts);
         setStatus('ready');
       } catch (err) {
@@ -171,6 +187,14 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
     [textServices]
   );
 
+  // Get verse mapping by layout type
+  const getVerseMapping = useCallback(
+    (layoutType: MushafLayoutType): VerseWordMapping | null => {
+      return verseMappings.get(layoutType) || null;
+    },
+    [verseMappings]
+  );
+
   // Context value
   const contextValue = useMemo<DigitalKhattContextValue>(
     () => ({
@@ -179,9 +203,10 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
       isReady: status === 'ready',
       getFont,
       getTextService,
+      getVerseMapping,
       availableLayouts,
     }),
-    [status, error, getFont, getTextService, availableLayouts]
+    [status, error, getFont, getTextService, getVerseMapping, availableLayouts]
   );
 
   return <DigitalKhattContext.Provider value={contextValue}>{children}</DigitalKhattContext.Provider>;

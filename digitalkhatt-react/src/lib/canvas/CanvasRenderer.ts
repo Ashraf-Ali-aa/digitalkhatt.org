@@ -11,6 +11,7 @@ import type {
   WordRect,
   LineRect,
   PageFormat,
+  HighlightGroup,
 } from '../core/types';
 import { PAGE_WIDTH, INTERLINE, MARGIN, FONTSIZE } from '../core/types';
 import { HarfBuzzFont, HarfBuzzBuffer, getArabLanguage, getArabScript, getWidth } from '../core/harfbuzz';
@@ -18,6 +19,8 @@ import { QuranTextService } from '../core/quran-text';
 import { analyzeLineForJust, justifyLine } from '../core/justification';
 import { applyTajweedByPage, DEFAULT_TAJWEED_COLORS } from '../core/tajweed';
 import { glyphCache } from './GlyphCache';
+import type { VerseWordMapping } from '../core/verse-mapping';
+import { getVerseForWord } from '../core/verse-mapping';
 
 // ============================================
 // Types
@@ -29,8 +32,14 @@ export interface RenderOptions {
   textColor?: string;
   tajweedEnabled?: boolean;
   tajweedColors?: Record<string, string>;
+  /** @deprecated Use highlightGroups instead */
   highlightedWords?: Array<{ lineIndex: number; wordIndex: number }>;
+  /** @deprecated Use highlightGroups instead */
   highlightColor?: string;
+  /** Multiple highlight groups with different colors */
+  highlightGroups?: Array<{ words: Array<{ lineIndex: number; wordIndex: number }>; color: string }>;
+  /** Verse mapping for populating surah/ayah in WordRect */
+  verseMapping?: VerseWordMapping;
 }
 
 export interface RenderResult {
@@ -70,7 +79,15 @@ export class CanvasRenderer {
       tajweedColors = DEFAULT_TAJWEED_COLORS,
       highlightedWords = [],
       highlightColor = 'rgba(255, 255, 0, 0.3)',
+      highlightGroups = [],
+      verseMapping,
     } = options;
+
+    // Merge legacy highlightedWords into highlightGroups for backward compatibility
+    const allHighlightGroups = [...highlightGroups];
+    if (highlightedWords.length > 0) {
+      allHighlightGroups.push({ words: highlightedWords, color: highlightColor });
+    }
 
     const wordRects: WordRect[] = [];
     const lineRects: LineRect[] = [];
@@ -156,6 +173,7 @@ export class CanvasRenderer {
 
         // Render the line
         const lineWordRects = this.renderLine(
+          pageIndex,
           lineIndex,
           lineText,
           lineTextInfo,
@@ -167,9 +185,9 @@ export class CanvasRenderer {
           justResult.xScale,
           textColor,
           tajweedColors,
-          highlightedWords,
-          highlightColor,
-          viewport
+          allHighlightGroups,
+          viewport,
+          verseMapping
         );
 
         wordRects.push(...lineWordRects);
@@ -195,6 +213,7 @@ export class CanvasRenderer {
    * Render a single line of text
    */
   private renderLine(
+    pageIndex: number,
     lineIndex: number,
     lineText: string,
     lineTextInfo: LineTextInfo,
@@ -206,9 +225,9 @@ export class CanvasRenderer {
     xScale: number,
     textColor: string,
     tajweedColors: Record<string, string>,
-    highlightedWords: Array<{ lineIndex: number; wordIndex: number }>,
-    highlightColor: string,
-    viewport: PageFormat
+    highlightGroups: Array<{ words: Array<{ lineIndex: number; wordIndex: number }>; color: string }>,
+    viewport: PageFormat,
+    verseMapping?: VerseWordMapping
   ): WordRect[] {
     const wordRects: WordRect[] = [];
     const ctx = this.ctx;
@@ -256,12 +275,15 @@ export class CanvasRenderer {
     let currentWordIndex = 0;
     let wordStartX = currentX;
 
-    // Draw highlighted backgrounds first
-    const highlightedSet = new Set(
-      highlightedWords
-        .filter((w) => w.lineIndex === lineIndex)
-        .map((w) => w.wordIndex)
-    );
+    // Build highlight map: wordIndex -> color (last group wins for overlaps)
+    const highlightMap = new Map<number, string>();
+    for (const group of highlightGroups) {
+      for (const w of group.words) {
+        if (w.lineIndex === lineIndex) {
+          highlightMap.set(w.wordIndex, group.color);
+        }
+      }
+    }
 
     // Render glyphs (RTL order)
     const effectiveScale = glyphScale * xScale;
@@ -338,6 +360,18 @@ export class CanvasRenderer {
     // Build word rects
     for (const [wordIdx, bounds] of wordBoundaries) {
       const wordInfo = lineTextInfo.wordInfos[wordIdx];
+
+      // Look up verse info if mapping is available
+      let surah: number | undefined;
+      let ayah: number | undefined;
+      if (verseMapping) {
+        const verseRef = getVerseForWord(verseMapping, pageIndex, lineIndex, wordIdx);
+        if (verseRef) {
+          surah = verseRef.surah;
+          ayah = verseRef.ayah;
+        }
+      }
+
       wordRects.push({
         lineIndex,
         wordIndex: wordIdx,
@@ -346,10 +380,13 @@ export class CanvasRenderer {
         width: bounds.endX - bounds.startX,
         height: glyphScale * FONTSIZE * 1.2,
         text: wordInfo?.text || '',
+        surah,
+        ayah,
       });
 
       // Draw highlight if needed
-      if (highlightedSet.has(wordIdx)) {
+      const highlightColor = highlightMap.get(wordIdx);
+      if (highlightColor) {
         ctx.fillStyle = highlightColor;
         ctx.fillRect(
           bounds.startX,

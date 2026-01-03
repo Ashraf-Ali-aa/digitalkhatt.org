@@ -103,6 +103,14 @@ export interface SajdaRenderInfo {
 }
 
 /**
+ * Word info for tracking word boundaries
+ */
+export interface WordInfo {
+  startIndex: number;
+  endIndex: number;
+}
+
+/**
  * Options for SVG rendering
  */
 export interface SVGRenderOptions {
@@ -126,6 +134,20 @@ export interface SVGRenderOptions {
   mushafType?: MushafLayoutType;
   /** Sajda information for rendering prostration markers */
   sajdaInfo?: SajdaRenderInfo;
+  /** Word info for tracking word boundaries */
+  wordInfos?: WordInfo[];
+}
+
+/**
+ * Word boundary information for click handling
+ */
+export interface WordBounds {
+  /** X position of word start (in SVG coordinates, negative for RTL) */
+  x: number;
+  /** Width of word */
+  width: number;
+  /** Word index in the line */
+  wordIndex: number;
 }
 
 /**
@@ -144,6 +166,8 @@ export interface SVGLineRenderResult {
   sajdaStartPos?: number;
   /** End position of sajda marker (if present) */
   sajdaEndPos?: number;
+  /** Word boundaries for click handling */
+  wordBounds?: WordBounds[];
 }
 
 
@@ -197,6 +221,7 @@ export class SVGLineRenderer {
       verseNumberFormat = 'arabic',
       mushafType = MushafLayoutTypeEnum.NewMadinah,
       sajdaInfo,
+      wordInfos,
     } = options;
 
     // Create SVG element
@@ -211,9 +236,34 @@ export class SVGLineRenderer {
     let sajdaStartPos: number | undefined;
     let sajdaEndPos: number | undefined;
 
+    // Track word boundaries (in SVG coordinates before scaling)
+    const wordBoundsMap = new Map<number, { startX: number; endX: number }>();
+    let currentWordIndex = -1;
+
     // Render glyphs in reverse order (RTL)
     for (let glyphIndex = shapedGlyphs.length - 1; glyphIndex >= 0; glyphIndex--) {
       const glyph = shapedGlyphs[glyphIndex];
+
+      // Track word boundaries based on cluster index
+      if (wordInfos) {
+        // Find which word this glyph belongs to
+        const clusterIndex = glyph.Cluster;
+        let wordIndex = -1;
+        for (let i = 0; i < wordInfos.length; i++) {
+          if (clusterIndex >= wordInfos[i].startIndex && clusterIndex <= wordInfos[i].endIndex) {
+            wordIndex = i;
+            break;
+          }
+        }
+
+        if (wordIndex !== -1) {
+          // Track start of word (first glyph we encounter for this word, which is the rightmost in RTL)
+          if (!wordBoundsMap.has(wordIndex)) {
+            wordBoundsMap.set(wordIndex, { startX: currentXPos, endX: currentXPos });
+          }
+          currentWordIndex = wordIndex;
+        }
+      }
 
       // Get or compute glyph path
       let pathString = this.glyphPathCache.get(glyph.GlyphId);
@@ -250,6 +300,12 @@ export class SVGLineRenderer {
         currentXPos -= simpleSpacing;
       } else {
         currentXPos -= glyph.XAdvance;
+      }
+
+      // Update word end position (leftmost position for RTL, which is more negative)
+      if (currentWordIndex !== -1 && wordBoundsMap.has(currentWordIndex)) {
+        const bounds = wordBoundsMap.get(currentWordIndex)!;
+        bounds.endX = Math.min(bounds.endX, currentXPos);
       }
 
       if (pathString) {
@@ -339,6 +395,24 @@ export class SVGLineRenderer {
 
     const lineWidth = -glyphScale * xScale * currentXPos;
 
+    // Convert word bounds map to scaled WordBounds array
+    let wordBounds: WordBounds[] | undefined;
+    if (wordBoundsMap.size > 0) {
+      wordBounds = [];
+      for (const [wordIndex, bounds] of wordBoundsMap) {
+        // Convert to scaled coordinates
+        // In RTL, startX is rightmost (larger), endX is leftmost (more negative)
+        // The width is the distance between them
+        const scaledStartX = bounds.startX * glyphScale * xScale;
+        const scaledEndX = bounds.endX * glyphScale * xScale;
+        wordBounds[wordIndex] = {
+          x: scaledEndX, // Left edge in SVG coords (more negative = more left)
+          width: scaledStartX - scaledEndX, // Width is positive
+          wordIndex,
+        };
+      }
+    }
+
     return {
       svg,
       lineGroup,
@@ -346,6 +420,7 @@ export class SVGLineRenderer {
       currentXPos,
       sajdaStartPos,
       sajdaEndPos,
+      wordBounds,
     };
   }
 

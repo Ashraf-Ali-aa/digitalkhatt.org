@@ -7,9 +7,14 @@
 
 import type { PageFormat, JustStyle } from './types';
 import { RenderingStates, type BufferableView } from './rendering-states';
-import type { SVGPageRenderer, SVGPageRenderOptions } from '../svg/SVGPageRenderer';
-import type { CSSPageRenderer, CSSPageRenderOptions } from '../css/CSSPageRenderer';
+import type { SVGPageRenderer, SVGPageRenderOptions, SVGWordClickInfo } from '../svg/SVGPageRenderer';
+import type { CSSPageRenderer, CSSPageRenderOptions, CSSWordClickInfo } from '../css/CSSPageRenderer';
 import type { VerseNumberFormat } from '../svg/SVGLineRenderer';
+
+/**
+ * Union type for renderer-specific word click info (works with both SVG and CSS renderers)
+ */
+export type RendererWordClickInfo = SVGWordClickInfo | CSSWordClickInfo;
 
 /**
  * Rendering options for PageViewer
@@ -25,6 +30,10 @@ export interface PageViewerRenderOptions {
   ayaSvgGroup?: SVGGElement;
   /** Optional function to apply tajweed coloring (returns array of maps per line) */
   applyTajweed?: (pageIndex: number) => Array<Map<number, string>>;
+  /** Enable clickable words */
+  enableWordClick?: boolean;
+  /** Callback when a word is clicked (works with both SVG and CSS renderers) */
+  onWordClick?: (info: RendererWordClickInfo) => void;
 }
 
 /**
@@ -72,6 +81,8 @@ export class PageViewer implements BufferableView {
   private pausePromise: Promise<boolean> | null = null;
   private lastDrawTime: number = 0;
   private zoomLayer: HTMLElement | null = null;
+  /** Word elements for hit testing (CSS renderer only) */
+  private wordElements: Map<string, HTMLElement> | null = null;
 
   /**
    * Create a new PageViewer
@@ -152,6 +163,8 @@ export class PageViewer implements BufferableView {
     // Render based on renderer type
     let lineElements: HTMLElement[];
 
+    console.log(`[PageViewer] draw() called for page ${this.pageIndex}, rendererType=${this.rendererType}, enableWordClick=${options.enableWordClick}`);
+
     if (this.rendererType === 'svg') {
       const svgRenderer = this.renderer as SVGPageRenderer;
       const svgOptions: SVGPageRenderOptions = {
@@ -160,16 +173,23 @@ export class PageViewer implements BufferableView {
         justStyle: options.justStyle,
         ayaSvgGroup: options.ayaSvgGroup,
         applyTajweed: options.applyTajweed,
+        enableWordClick: options.enableWordClick,
+        onWordClick: options.onWordClick as SVGPageRenderOptions['onWordClick'],
       };
       const result = svgRenderer.renderPage(this.pageIndex, this.viewport, svgOptions);
       lineElements = result.lineElements;
+      // SVG renderer also returns word elements (as SVGElement, but compatible)
+      this.wordElements = result.wordElements as Map<string, HTMLElement> | undefined ?? null;
     } else {
       const cssRenderer = this.renderer as CSSPageRenderer;
       const cssOptions: CSSPageRenderOptions = {
         tajweedEnabled: options.tajweedEnabled,
+        enableWordClick: options.enableWordClick,
+        onWordClick: options.onWordClick,
       };
       const result = cssRenderer.renderPage(this.pageIndex, this.viewport, cssOptions);
       lineElements = result.lineElements;
+      this.wordElements = result.wordElements || null;
     }
 
     // Progressive rendering: append lines with yield to prevent blocking
@@ -266,6 +286,13 @@ export class PageViewer implements BufferableView {
    */
   getViewport(): PageFormat {
     return this.viewport;
+  }
+
+  /**
+   * Get word elements for hit testing (CSS renderer only)
+   */
+  getWordElements(): Map<string, HTMLElement> | null {
+    return this.wordElements;
   }
 
   /**

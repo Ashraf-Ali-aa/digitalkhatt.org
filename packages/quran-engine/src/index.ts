@@ -93,11 +93,19 @@ export type {
   SVGPageRendererConfig,
   LineRenderResult,
   PageRenderResult,
+  SVGWordClickInfo,
+  SVGHighlightGroup,
 } from './svg';
 
 // CSS rendering module
 export { CSSPageRenderer } from './css';
-export type { CSSPageRenderOptions, CSSPageRendererConfig, CSSPageRenderResult } from './css';
+export type {
+  CSSPageRenderOptions,
+  CSSPageRendererConfig,
+  CSSPageRenderResult,
+  CSSWordClickInfo,
+  CSSHighlightGroup,
+} from './css';
 
 // Configuration and factory
 export { createQuranEngine } from './config';

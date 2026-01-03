@@ -31,6 +31,29 @@ import {
 } from './SVGLineRenderer';
 
 /**
+ * Word click callback info for SVG renderer
+ */
+export interface SVGWordClickInfo {
+  pageIndex: number;
+  lineIndex: number;
+  wordIndex: number;
+  text: string;
+  element: SVGElement;
+}
+
+/**
+ * Highlight group for verses or words in SVG
+ */
+export interface SVGHighlightGroup {
+  /** Verses to highlight (identified by surah:ayah) */
+  verses?: Array<{ surah: number; ayah: number }>;
+  /** Individual words to highlight (page, line, word indices) */
+  words?: Array<{ page: number; line: number; word: number }>;
+  /** Highlight background color */
+  color: string;
+}
+
+/**
  * Options for SVG page rendering
  */
 export interface SVGPageRenderOptions {
@@ -44,6 +67,10 @@ export interface SVGPageRenderOptions {
   ayaSvgGroup?: SVGGElement;
   /** Optional function to apply tajweed coloring (returns array of maps per line) */
   applyTajweed?: (pageIndex: number) => Array<Map<number, string>>;
+  /** Enable clickable words */
+  enableWordClick?: boolean;
+  /** Callback when a word is clicked */
+  onWordClick?: (info: SVGWordClickInfo) => void;
 }
 
 /**
@@ -76,6 +103,8 @@ export interface PageRenderResult {
   lineElements: HTMLElement[];
   /** Time taken to render in milliseconds */
   renderTime: number;
+  /** Word elements for hit testing (keyed by "page:line:word") */
+  wordElements?: Map<string, SVGElement>;
 }
 
 /**
@@ -118,6 +147,7 @@ export class SVGPageRenderer {
     const quranText = this.textService.quranText;
     const lineCount = quranText[pageIndex].length;
     const lineElements: HTMLElement[] = [];
+    const wordElements = new Map<string, SVGElement>();
 
     const scale = viewport.width / PAGE_WIDTH;
     const defaultMargin = MARGIN * scale;
@@ -213,7 +243,10 @@ export class SVGPageRenderer {
           ayaPositioning.yOffset,
           containerWidth,
           containerHeight,
-          sajdaInfo
+          sajdaInfo,
+          pageIndex,
+          lineIndex,
+          wordElements
         );
       } else if (lineInfo.lineType === 1) {
         // Sura header line
@@ -265,7 +298,10 @@ export class SVGPageRenderer {
           ayaPositioning.yOffset,
           containerWidth,
           containerHeight,
-          undefined
+          undefined,
+          pageIndex,
+          lineIndex,
+          wordElements
         );
       }
 
@@ -277,6 +313,7 @@ export class SVGPageRenderer {
     return {
       lineElements,
       renderTime: endTime - startTime,
+      wordElements: wordElements.size > 0 ? wordElements : undefined,
     };
   }
 
@@ -325,7 +362,10 @@ export class SVGPageRenderer {
     ayaYOffset: number,
     containerWidth: number,
     containerHeight: number,
-    sajdaInfo?: SajdaRenderInfo
+    sajdaInfo?: SajdaRenderInfo,
+    pageIndex?: number,
+    lineIndex?: number,
+    wordElements?: Map<string, SVGElement>
   ): void {
     // Build features array
     const features: HBFeature[] = lineTextInfo.features ? [...lineTextInfo.features] : [];
@@ -387,6 +427,7 @@ export class SVGPageRenderer {
         verseNumberFormat: options.verseNumberFormat,
         mushafType: this.mushafType,
         sajdaInfo,
+        wordInfos: options.enableWordClick ? lineTextInfo.wordInfos : undefined,
       }
     );
 
@@ -419,6 +460,57 @@ export class SVGPageRenderer {
     result.svg.style.right = '0px';
     result.svg.style.top = '0px';
 
+    // Add word click overlays if enabled
+    console.log('SVG renderSVGLine:', { enableWordClick: options.enableWordClick, pageIndex, lineIndex, hasWordBounds: !!result.wordBounds, wordBoundsLength: result.wordBounds?.length });
+    if (options.enableWordClick && pageIndex !== undefined && lineIndex !== undefined && result.wordBounds) {
+      const wordOverlayGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      wordOverlayGroup.setAttribute('class', 'word-overlays');
+
+      for (let wordIndex = 0; wordIndex < result.wordBounds.length; wordIndex++) {
+        const bounds = result.wordBounds[wordIndex];
+        if (!bounds) continue;
+
+        const wordRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        wordRect.setAttribute('x', bounds.x.toString());
+        wordRect.setAttribute('y', viewBoxY.toString());
+        wordRect.setAttribute('width', bounds.width.toString());
+        wordRect.setAttribute('height', viewBoxHeight.toString());
+        wordRect.setAttribute('fill', 'transparent');
+        wordRect.setAttribute('class', 'word-click-area');
+        wordRect.setAttribute('data-page', pageIndex.toString());
+        wordRect.setAttribute('data-line', lineIndex.toString());
+        wordRect.setAttribute('data-word', wordIndex.toString());
+        wordRect.style.cursor = 'pointer';
+
+        // Extract word text from lineTextInfo
+        const wordInfo = lineTextInfo.wordInfos[wordIndex];
+        const wordText = wordInfo ? lineText.substring(wordInfo.startIndex, wordInfo.endIndex + 1) : '';
+
+        if (options.onWordClick) {
+          wordRect.addEventListener('click', (e) => {
+            e.stopPropagation();
+            options.onWordClick!({
+              pageIndex,
+              lineIndex,
+              wordIndex,
+              text: wordText,
+              element: wordRect,
+            });
+          });
+        }
+
+        // Store in word elements map for highlighting
+        if (wordElements) {
+          const key = `${pageIndex}:${lineIndex}:${wordIndex}`;
+          wordElements.set(key, wordRect);
+        }
+
+        wordOverlayGroup.appendChild(wordRect);
+      }
+
+      result.svg.appendChild(wordOverlayGroup);
+    }
+
     lineElem.appendChild(result.svg);
   }
 
@@ -434,5 +526,39 @@ export class SVGPageRenderer {
    */
   getLineRenderer(): SVGLineRenderer {
     return this.lineRenderer;
+  }
+
+  /**
+   * Apply highlights to word elements
+   */
+  applyHighlights(
+    wordElements: Map<string, HTMLElement>,
+    highlightGroups: SVGHighlightGroup[],
+    pageIndex: number
+  ): void {
+    // Clear existing highlights
+    for (const [, element] of wordElements) {
+      // For SVG rect elements, reset fill
+      if (element instanceof SVGElement) {
+        (element as SVGElement).style.fill = '';
+        (element as SVGElement).classList.remove('highlighted');
+      }
+    }
+
+    // Apply each highlight group
+    for (const group of highlightGroups) {
+      if (group.words) {
+        for (const word of group.words) {
+          if (word.page === pageIndex) {
+            const key = `${word.page}:${word.line}:${word.word}`;
+            const element = wordElements.get(key);
+            if (element && element instanceof SVGElement) {
+              (element as SVGElement).style.fill = group.color;
+              (element as SVGElement).classList.add('highlighted');
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -10,4 +10,6 @@ export {
   type CSSPageRenderOptions,
   type CSSPageRendererConfig,
   type CSSPageRenderResult,
+  type CSSWordClickInfo,
+  type CSSHighlightGroup,
 } from './CSSPageRenderer';

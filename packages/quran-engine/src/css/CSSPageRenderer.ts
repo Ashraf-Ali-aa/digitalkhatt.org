@@ -19,11 +19,26 @@ import {
 import type { QuranTextServiceLike } from '../core/justification';
 
 /**
+ * Word click callback info
+ */
+export interface CSSWordClickInfo {
+  pageIndex: number;
+  lineIndex: number;
+  wordIndex: number;
+  text: string;
+  element: HTMLElement;
+}
+
+/**
  * Options for CSS page rendering
  */
 export interface CSSPageRenderOptions {
   /** Enable tajweed coloring */
   tajweedEnabled: boolean;
+  /** Enable clickable words */
+  enableWordClick?: boolean;
+  /** Callback when a word is clicked */
+  onWordClick?: (info: CSSWordClickInfo) => void;
 }
 
 /**
@@ -37,6 +52,18 @@ export interface CSSPageRendererConfig {
 }
 
 /**
+ * Highlight group for verses or words
+ */
+export interface CSSHighlightGroup {
+  /** Verses to highlight (identified by surah:ayah) */
+  verses?: Array<{ surah: number; ayah: number }>;
+  /** Individual words to highlight (page, line, word indices) */
+  words?: Array<{ page: number; line: number; word: number }>;
+  /** Highlight background color */
+  color: string;
+}
+
+/**
  * Result of rendering a full page
  */
 export interface CSSPageRenderResult {
@@ -44,6 +71,8 @@ export interface CSSPageRenderResult {
   lineElements: HTMLElement[];
   /** Time taken to render in milliseconds */
   renderTime: number;
+  /** Word elements for hit testing */
+  wordElements?: Map<string, HTMLElement>;
 }
 
 /**
@@ -78,12 +107,14 @@ export class CSSPageRenderer {
   renderPage(
     pageIndex: number,
     viewport: PageFormat,
-    _options: CSSPageRenderOptions
+    options: CSSPageRenderOptions
   ): CSSPageRenderResult {
+    console.log(`[CSSPageRenderer] renderPage() called for page ${pageIndex}, enableWordClick=${options.enableWordClick}, hasOnWordClick=${!!options.onWordClick}`);
     const startTime = performance.now();
     const quranText = this.textService.quranText;
     const lineCount = quranText[pageIndex].length;
     const lineElements: HTMLElement[] = [];
+    const wordElements = new Map<string, HTMLElement>();
 
     const scale = viewport.width / PAGE_WIDTH;
     const defaultMargin = MARGIN * scale;
@@ -114,8 +145,19 @@ export class CSSPageRenderer {
         const innerSpan = document.createElement('div');
         innerSpan.classList.add('justifyline');
 
-        // Handle sajda (prostration) marking
-        if (lineInfo.sajda) {
+        // Handle sajda (prostration) marking or word-level rendering
+        if (options.enableWordClick) {
+          console.log(`[CSSPageRenderer] Rendering line ${lineIndex} with word click enabled`);
+          this.renderLineWithWords(
+            innerSpan,
+            lineText,
+            pageIndex,
+            lineIndex,
+            wordElements,
+            options,
+            lineInfo.sajda
+          );
+        } else if (lineInfo.sajda) {
           innerSpan.innerHTML = this.renderSajdaText(lineText, lineInfo.sajda);
         } else {
           innerSpan.textContent = lineText;
@@ -188,7 +230,68 @@ export class CSSPageRenderer {
     return {
       lineElements,
       renderTime: endTime - startTime,
+      wordElements: wordElements.size > 0 ? wordElements : undefined,
     };
+  }
+
+  /**
+   * Render a line with individual word spans for click handling
+   */
+  private renderLineWithWords(
+    container: HTMLElement,
+    lineText: string,
+    pageIndex: number,
+    lineIndex: number,
+    wordElements: Map<string, HTMLElement>,
+    options: CSSPageRenderOptions,
+    sajda?: { text?: string }
+  ): void {
+    // Split line into words (by spaces)
+    const words = lineText.split(' ');
+
+    words.forEach((word, wordIndex) => {
+      if (word.length === 0) return;
+
+      const wordSpan = document.createElement('span');
+      wordSpan.classList.add('quran-word');
+      wordSpan.textContent = word;
+
+      // Store word data attributes
+      wordSpan.dataset.page = String(pageIndex);
+      wordSpan.dataset.line = String(lineIndex);
+      wordSpan.dataset.word = String(wordIndex);
+
+      // Handle sajda marking on words
+      if (sajda?.text && word.includes(sajda.text)) {
+        wordSpan.classList.add('sajda');
+      }
+
+      // Add click handler if callback provided
+      if (options.onWordClick) {
+        wordSpan.style.cursor = 'pointer';
+        wordSpan.addEventListener('click', (e) => {
+          e.stopPropagation();
+          options.onWordClick!({
+            pageIndex,
+            lineIndex,
+            wordIndex,
+            text: word,
+            element: wordSpan,
+          });
+        });
+      }
+
+      // Store in word elements map
+      const key = `${pageIndex}:${lineIndex}:${wordIndex}`;
+      wordElements.set(key, wordSpan);
+
+      container.appendChild(wordSpan);
+
+      // Add space between words (except last word)
+      if (wordIndex < words.length - 1) {
+        container.appendChild(document.createTextNode(' '));
+      }
+    });
   }
 
   /**
@@ -199,5 +302,36 @@ export class CSSPageRenderer {
       return lineText.replace(sajda.text, `<span class='sajda'>${sajda.text}</span>`);
     }
     return lineText;
+  }
+
+  /**
+   * Apply highlights to word elements
+   */
+  applyHighlights(
+    wordElements: Map<string, HTMLElement>,
+    highlightGroups: CSSHighlightGroup[],
+    pageIndex: number
+  ): void {
+    // Clear existing highlights
+    for (const [, element] of wordElements) {
+      element.style.backgroundColor = '';
+      element.classList.remove('highlighted');
+    }
+
+    // Apply each highlight group
+    for (const group of highlightGroups) {
+      if (group.words) {
+        for (const word of group.words) {
+          if (word.page === pageIndex) {
+            const key = `${word.page}:${word.line}:${word.word}`;
+            const element = wordElements.get(key);
+            if (element) {
+              element.style.backgroundColor = group.color;
+              element.classList.add('highlighted');
+            }
+          }
+        }
+      }
+    }
   }
 }

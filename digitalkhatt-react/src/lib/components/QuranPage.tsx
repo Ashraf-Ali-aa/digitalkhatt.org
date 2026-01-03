@@ -12,6 +12,7 @@ import type {
   VerseClickInfo,
   WordRect,
   PageFormat,
+  HighlightGroup,
 } from '../core/types';
 import { LAYOUT_TYPE_MAP, PAGE_WIDTH } from '../core/types';
 import { useDigitalKhatt } from './QuranProvider';
@@ -19,6 +20,7 @@ import { CanvasRenderer } from '../canvas/CanvasRenderer';
 import type { RenderOptions } from '../canvas/CanvasRenderer';
 import { HitTestManager } from '../canvas/HitTestManager';
 import { DEFAULT_TAJWEED_COLORS } from '../core/tajweed';
+import { getWordsForVerse } from '../core/verse-mapping';
 
 // ============================================
 // Types
@@ -47,12 +49,14 @@ export interface QuranPageProps {
   tajweedColors?: Record<string, string>;
 
   // Highlighting
-  /** Verses to highlight */
+  /** Verses to highlight (single color, uses highlightColor) */
   highlightedVerses?: Array<{ surah: number; ayah: number }>;
-  /** Words to highlight */
+  /** Words to highlight (single color, uses highlightColor) */
   highlightedWords?: Array<{ line: number; word: number }>;
-  /** Highlight background color */
+  /** Highlight background color (used for highlightedVerses and highlightedWords) */
   highlightColor?: string;
+  /** Multiple highlight groups with different colors */
+  highlightGroups?: HighlightGroup[];
 
   // Events
   /** Called when a word is clicked */
@@ -89,10 +93,12 @@ export function QuranPage({
   backgroundColor,
   textColor = '#000000',
   tajweedColors = DEFAULT_TAJWEED_COLORS,
+  highlightedVerses = [],
   highlightedWords = [],
   highlightColor = 'rgba(255, 255, 0, 0.3)',
+  highlightGroups = [],
   onWordClick,
-  // onVerseClick - reserved for future use
+  onVerseClick,
   onWordHover,
   onRenderComplete,
   enableAccessibility = true,
@@ -105,7 +111,7 @@ export function QuranPage({
   const hitTestRef = useRef<HitTestManager>(new HitTestManager());
   const [hoveredWord, setHoveredWord] = useState<WordRect | null>(null);
 
-  const { status, isReady, getFont, getTextService } = useDigitalKhatt();
+  const { status, isReady, getFont, getTextService, getVerseMapping } = useDigitalKhatt();
 
   // Convert layout type string to enum
   const mushafType: MushafLayoutType = LAYOUT_TYPE_MAP[layoutType];
@@ -122,9 +128,70 @@ export function QuranPage({
     };
   }, [width, scale]);
 
-  // Get font and text service
+  // Get font, text service, and verse mapping
   const font = useMemo(() => getFont(mushafType), [getFont, mushafType]);
   const textService = useMemo(() => getTextService(mushafType), [getTextService, mushafType]);
+  const verseMapping = useMemo(() => getVerseMapping(mushafType), [getVerseMapping, mushafType]);
+
+  // Convert highlightGroups and legacy props to renderer format
+  const rendererHighlightGroups = useMemo(() => {
+    const pageIndex = pageNumber - 1;
+    const groups: Array<{ words: Array<{ lineIndex: number; wordIndex: number }>; color: string }> = [];
+
+    // Process highlightGroups prop
+    for (const group of highlightGroups) {
+      const words: Array<{ lineIndex: number; wordIndex: number }> = [];
+
+      // Add words from verses
+      if (group.verses && verseMapping) {
+        for (const verse of group.verses) {
+          const verseWords = getWordsForVerse(verseMapping, verse.surah, verse.ayah);
+          for (const w of verseWords) {
+            if (w.page === pageIndex) {
+              words.push({ lineIndex: w.line, wordIndex: w.word });
+            }
+          }
+        }
+      }
+
+      // Add direct word references
+      if (group.words) {
+        for (const w of group.words) {
+          if (w.page === pageIndex) {
+            words.push({ lineIndex: w.line, wordIndex: w.word });
+          }
+        }
+      }
+
+      if (words.length > 0) {
+        groups.push({ words, color: group.color });
+      }
+    }
+
+    // Process legacy highlightedVerses prop
+    if (highlightedVerses.length > 0 && verseMapping) {
+      const words: Array<{ lineIndex: number; wordIndex: number }> = [];
+      for (const verse of highlightedVerses) {
+        const verseWords = getWordsForVerse(verseMapping, verse.surah, verse.ayah);
+        for (const w of verseWords) {
+          if (w.page === pageIndex) {
+            words.push({ lineIndex: w.line, wordIndex: w.word });
+          }
+        }
+      }
+      if (words.length > 0) {
+        groups.push({ words, color: highlightColor });
+      }
+    }
+
+    // Process legacy highlightedWords prop
+    if (highlightedWords.length > 0) {
+      const words = highlightedWords.map((w) => ({ lineIndex: w.line, wordIndex: w.word }));
+      groups.push({ words, color: highlightColor });
+    }
+
+    return groups;
+  }, [pageNumber, highlightGroups, highlightedVerses, highlightedWords, highlightColor, verseMapping]);
 
   // Render page
   useEffect(() => {
@@ -156,8 +223,8 @@ export function QuranPage({
       textColor,
       tajweedEnabled,
       tajweedColors,
-      highlightedWords: highlightedWords.map((w) => ({ lineIndex: w.line, wordIndex: w.word })),
-      highlightColor,
+      highlightGroups: rendererHighlightGroups,
+      verseMapping,
     };
 
     // Render the page
@@ -179,8 +246,8 @@ export function QuranPage({
     textColor,
     tajweedEnabled,
     tajweedColors,
-    highlightedWords,
-    highlightColor,
+    rendererHighlightGroups,
+    verseMapping,
     onRenderComplete,
   ]);
 
@@ -228,11 +295,22 @@ export function QuranPage({
 
       const { word } = hitTestRef.current.hitTest(coords.x, coords.y);
 
-      if (word && onWordClick) {
-        onWordClick(createWordClickInfo(word));
+      if (word) {
+        if (onWordClick) {
+          onWordClick(createWordClickInfo(word));
+        }
+
+        // Also fire verse click if word has surah/ayah info
+        if (onVerseClick && word.surah !== undefined && word.ayah !== undefined) {
+          onVerseClick({
+            surah: word.surah,
+            ayah: word.ayah,
+            pageNumber,
+          });
+        }
       }
     },
-    [getCanvasCoords, createWordClickInfo, onWordClick]
+    [getCanvasCoords, createWordClickInfo, onWordClick, onVerseClick, pageNumber]
   );
 
   // Handle mouse move (hover)

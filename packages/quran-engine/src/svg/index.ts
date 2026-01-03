@@ -23,4 +23,6 @@ export {
   type SVGPageRendererConfig,
   type LineRenderResult,
   type PageRenderResult,
+  type SVGWordClickInfo,
+  type SVGHighlightGroup,
 } from './SVGPageRenderer';

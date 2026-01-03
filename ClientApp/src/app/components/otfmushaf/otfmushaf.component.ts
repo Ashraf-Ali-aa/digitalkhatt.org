@@ -27,8 +27,10 @@ import {
   MushafLayoutTypeEnum,
   type PageFormat,
   type PageViewerRenderOptions,
+  type CSSWordClickInfo,
 } from "@digitalkhatt/quran-engine"
 import { MushafLayoutType, NewMadinahQuranTextService, OldMadinahQuranTextService, QuranTextIndopak15Service, QuranTextService, MUSHAFLAYOUTTYPE } from '../../services/qurantext.service';
+import { VerseMappingService, VerseRef, WordClickInfo, VerseClickInfo, HighlightGroup } from '../../services/verse-mapping.service';
 import { TajweedService } from '../../services/tajweed.service';
 import { saveAs } from 'file-saver-es';
 import { commonModules } from '../../app.config';
@@ -138,6 +140,10 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
 
   hideElement: boolean = false;
 
+  // Word click and highlight support
+  enableWordClick: boolean = true;
+  highlightGroups: HighlightGroup[] = [];
+
   constructor(@Inject(MUSHAFLAYOUTTYPE) mushafLayoutType: MushafLayoutType,
     private sidebarContentsService: SidebarContentsService,
     public scrollDispatcher: ScrollDispatcher, private ngZone: NgZone,
@@ -148,6 +154,7 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
     private tajweedService: TajweedService,
     private _snackBar: MatSnackBar,
     private route: ActivatedRoute,
+    private verseMappingService: VerseMappingService,
   ) {
 
     this.debug = this.route.snapshot.queryParams.debug !== undefined;
@@ -758,7 +765,13 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
           verseNumberFormat: 'arabic',
           justStyle: JustStyleEnum.XScale,
           applyTajweed: (pageIndex: number) => this.tajweedService.applyTajweedByPage(this.quranTextService, pageIndex),
+          enableWordClick: this.enableWordClick,
+          onWordClick: this.enableWordClick ? (info: CSSWordClickInfo) => {
+            console.log('CSSPageRenderer onWordClick fired:', info);
+            this.handleWordClick(info);
+          } : undefined,
         };
+        console.log('Rendering page with enableWordClick:', this.enableWordClick);
 
         view.draw(renderOptions)
           .catch(error => {
@@ -1113,6 +1126,151 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
       this.router.navigate(['/hb/indopak15'])
     }
 
+  }
+
+  // ============================================
+  // Word Click and Highlight Methods
+  // ============================================
+
+  /**
+   * Handle word click from CSSPageRenderer
+   */
+  handleWordClick(info: CSSWordClickInfo): void {
+    // Get verse reference for clicked word
+    const verseRef = this.verseMappingService.getVerseForWord(
+      this.quranTextService,
+      info.pageIndex,
+      info.lineIndex,
+      info.wordIndex
+    );
+
+    // Build word click info
+    const wordClickInfo: WordClickInfo = {
+      pageNumber: info.pageIndex + 1,
+      lineIndex: info.lineIndex,
+      wordIndex: info.wordIndex,
+      text: info.text,
+      surah: verseRef?.surah,
+      ayah: verseRef?.ayah,
+    };
+
+    // Run in Angular zone for change detection
+    this.ngZone.run(() => {
+      console.log('Word clicked:', wordClickInfo);
+
+      // Emit events (can be extended with @Output EventEmitters)
+      this.onWordClick(wordClickInfo);
+
+      // If we have verse info, also trigger verse click
+      if (verseRef) {
+        const verseClickInfo: VerseClickInfo = {
+          surah: verseRef.surah,
+          ayah: verseRef.ayah,
+          pageNumber: info.pageIndex + 1,
+        };
+        this.onVerseClick(verseClickInfo);
+      }
+    });
+  }
+
+  /**
+   * Called when a word is clicked
+   * Override this method or use @Output to handle word clicks
+   */
+  onWordClick(info: WordClickInfo): void {
+    // Default implementation - can be overridden or connected to @Output
+    console.log(`Word clicked: Page ${info.pageNumber}, Line ${info.lineIndex}, Word ${info.wordIndex}`);
+    if (info.surah && info.ayah) {
+      console.log(`Verse: Surah ${info.surah}, Ayah ${info.ayah}`);
+    }
+  }
+
+  /**
+   * Called when a verse is clicked
+   * Override this method or use @Output to handle verse clicks
+   */
+  onVerseClick(info: VerseClickInfo): void {
+    // Default implementation - can be overridden or connected to @Output
+    console.log(`Verse clicked: Surah ${info.surah}, Ayah ${info.ayah}`);
+
+    // Example: Highlight the clicked verse
+    this.highlightVerse(info.surah, info.ayah);
+  }
+
+  /**
+   * Highlight a specific verse
+   */
+  highlightVerse(surah: number, ayah: number, color: string = 'rgba(255, 255, 0, 0.3)'): void {
+    // Get all word positions for this verse
+    const words = this.verseMappingService.getWordsForVerse(
+      this.quranTextService,
+      surah,
+      ayah
+    );
+
+    // Update highlight groups
+    this.highlightGroups = [{
+      verses: [{ surah, ayah }],
+      words: words,
+      color,
+    }];
+
+    // Apply highlights to visible pages
+    this.applyHighlightsToVisiblePages();
+  }
+
+  /**
+   * Highlight multiple verses
+   */
+  highlightVerses(verses: Array<{ surah: number; ayah: number }>, color: string = 'rgba(255, 255, 0, 0.3)'): void {
+    // Get all word positions for these verses
+    const words = this.verseMappingService.getWordsForVerses(
+      this.quranTextService,
+      verses
+    );
+
+    // Update highlight groups
+    this.highlightGroups = [{
+      verses,
+      words,
+      color,
+    }];
+
+    // Apply highlights to visible pages
+    this.applyHighlightsToVisiblePages();
+  }
+
+  /**
+   * Clear all highlights
+   */
+  clearHighlights(): void {
+    this.highlightGroups = [];
+    this.applyHighlightsToVisiblePages();
+  }
+
+  /**
+   * Apply highlights to all visible pages
+   */
+  private applyHighlightsToVisiblePages(): void {
+    if (!this.cssPageRenderer) return;
+
+    // Get visible pages
+    const visible = this._getVisiblePages();
+    if (!visible.views) return;
+
+    for (const viewInfo of visible.views) {
+      const view = viewInfo.view as PageViewer;
+      const wordElements = view.getWordElements();
+      if (wordElements) {
+        // Convert highlight groups to page-specific format
+        const pageHighlights = this.highlightGroups.map(group => ({
+          words: group.words?.filter(w => w.page === view.pageIndex) || [],
+          color: group.color,
+        }));
+
+        this.cssPageRenderer.applyHighlights(wordElements, pageHighlights, view.pageIndex);
+      }
+    }
   }
 }
 

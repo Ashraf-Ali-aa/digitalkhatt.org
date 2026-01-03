@@ -30,14 +30,16 @@ export type {
   WordClickInfo,
   VerseClickInfo,
   HighlightStyle,
+  HighlightGroup,
   TajweedColorMap,
   WordRect,
   LineRect,
   PageFormat,
   RenderResult,
   LoadingStatus,
-  DigitalKhattContextValue,
 } from './core/types';
+
+// DigitalKhattContextValue is exported from QuranProvider
 
 export {
   LAYOUT_TYPE_MAP,
@@ -57,6 +59,8 @@ export type { HarfBuzzFont, HarfBuzzExports } from './core/harfbuzz';
 export { QuranTextService, createQuranTextService } from './core/quran-text';
 export { applyTajweedByPage, DEFAULT_TAJWEED_COLORS } from './core/tajweed';
 export { justifyLine, analyzeLineForJust } from './core/justification';
+export type { VerseWordMapping, WordPosition } from './core/verse-mapping';
+export { buildVerseMapping, getVerseForWord, getWordsForVerse, getWordsForVerses } from './core/verse-mapping';
 
 // ============================================
 // Canvas Utilities
@@ -70,7 +74,7 @@ export { GlyphCache, glyphCache } from './canvas/GlyphCache';
 // React Components
 // ============================================
 export { QuranProvider } from './components/QuranProvider';
-export type { QuranProviderConfig, QuranProviderProps } from './components/QuranProvider';
+export type { QuranProviderConfig, QuranProviderProps, DigitalKhattContextValue } from './components/QuranProvider';
 
 export { QuranPage } from './components/QuranPage';
 export type { QuranPageProps } from './components/QuranPage';

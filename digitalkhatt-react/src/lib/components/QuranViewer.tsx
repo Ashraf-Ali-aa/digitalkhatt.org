@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { MushafLayoutTypeString, WordClickInfo, VerseClickInfo } from '../core/types';
+import type { MushafLayoutTypeString, WordClickInfo, VerseClickInfo, HighlightGroup } from '../core/types';
 import { QuranPage } from './QuranPage';
 import { useDigitalKhatt } from './QuranProvider';
 import { DEFAULT_TAJWEED_COLORS } from '../core/tajweed';
@@ -55,12 +55,14 @@ export interface QuranViewerProps {
   pageGap?: number;
 
   // Highlighting
-  /** Verses to highlight */
+  /** Verses to highlight (single color, uses highlightColor) */
   highlightedVerses?: Array<{ surah: number; ayah: number }>;
-  /** Words to highlight */
+  /** Words to highlight (single color, uses highlightColor) */
   highlightedWords?: Array<{ page: number; line: number; word: number }>;
-  /** Highlight color */
+  /** Highlight color (used for highlightedVerses and highlightedWords) */
   highlightColor?: string;
+  /** Multiple highlight groups with different colors */
+  highlightGroups?: HighlightGroup[];
 
   // Events
   /** Called when a word is clicked */
@@ -100,9 +102,10 @@ export function QuranViewer({
   textColor = '#000000',
   tajweedColors = DEFAULT_TAJWEED_COLORS,
   pageGap = 20,
-  // highlightedVerses - reserved for future use
+  highlightedVerses = [],
   highlightedWords = [],
   highlightColor = 'rgba(255, 255, 0, 0.3)',
+  highlightGroups = [],
   onWordClick,
   onVerseClick,
   onWordHover,
@@ -335,8 +338,10 @@ export function QuranViewer({
             backgroundColor={backgroundColor}
             textColor={textColor}
             tajweedColors={tajweedColors}
+            highlightedVerses={highlightedVerses}
             highlightedWords={getHighlightedWordsForPage(pageNumber)}
             highlightColor={highlightColor}
+            highlightGroups={highlightGroups}
             onWordClick={onWordClick}
             onVerseClick={onVerseClick}
             onWordHover={onWordHover}
@@ -357,7 +362,9 @@ export function QuranViewer({
     backgroundColor,
     textColor,
     tajweedColors,
+    highlightedVerses,
     highlightColor,
+    highlightGroups,
     onWordClick,
     onVerseClick,
     onWordHover,

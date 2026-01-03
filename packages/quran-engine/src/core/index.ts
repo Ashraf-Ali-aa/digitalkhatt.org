@@ -28,6 +28,7 @@ export type {
   WordClickInfo,
   VerseClickInfo,
   HighlightStyle,
+  HighlightGroup,
   TajweedColorMap,
   WordRect,
   LineRect,
@@ -85,7 +86,7 @@ export type { BufferableView } from './rendering-states';
 export { RenderingStates, PageViewBuffer, DEFAULT_CACHE_SIZE } from './rendering-states';
 
 // PageViewer
-export type { PageViewerConfig, PageViewerRenderOptions } from './PageViewer';
+export type { PageViewerConfig, PageViewerRenderOptions, RendererWordClickInfo } from './PageViewer';
 export { PageViewer } from './PageViewer';
 
 // QuranViewer
@@ -96,3 +97,12 @@ export type {
   ScrollState,
 } from './QuranViewer';
 export { QuranViewer } from './QuranViewer';
+
+// Verse Mapping
+export type { VerseWordMapping, WordPosition } from './verse-mapping';
+export {
+  buildVerseMapping,
+  getVerseForWord,
+  getWordsForVerse,
+  getWordsForVerses,
+} from './verse-mapping';

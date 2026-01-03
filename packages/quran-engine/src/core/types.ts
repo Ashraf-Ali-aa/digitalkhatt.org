@@ -193,6 +193,19 @@ export interface HighlightStyle {
   opacity?: number;
 }
 
+/**
+ * A group of highlights with a specific color
+ * Can specify either verses (surah/ayah) or individual words
+ */
+export interface HighlightGroup {
+  /** Verses to highlight (all words in these verses will be highlighted) */
+  verses?: Array<{ surah: number; ayah: number }>;
+  /** Individual words to highlight (page is 0-indexed) */
+  words?: Array<{ page: number; line: number; word: number }>;
+  /** Highlight background color */
+  color: string;
+}
+
 export interface TajweedColorMap {
   tafkim?: string;
   kalkala?: string;
