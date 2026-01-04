@@ -2,8 +2,8 @@
  * InteractiveDemo - Demonstrates interactive features like highlighting
  */
 
-import { useState, useCallback } from 'react';
-import { QuranPage, type WordClickInfo, type MushafLayoutTypeString } from '../lib';
+import { useState, useCallback, useMemo } from 'react';
+import { QuranPage, type WordClickInfo, type MushafLayoutTypeString, type VerseNumberFormat, useDigitalKhatt } from '../lib';
 
 interface InteractiveDemoProps {
   layoutType: MushafLayoutTypeString;
@@ -22,8 +22,25 @@ export function InteractiveDemo({ layoutType }: InteractiveDemoProps) {
   const [highlightMode, setHighlightMode] = useState<'single' | 'multi'>('multi');
   const [highlightColor, setHighlightColor] = useState('rgba(255, 255, 0, 0.4)');
   const [tajweedEnabled, setTajweedEnabled] = useState(true);
+  const [verseNumberFormat, setVerseNumberFormat] = useState<VerseNumberFormat>(() => {
+    const saved = localStorage.getItem('verseNumberFormat');
+    return (saved === 'english' ? 'english' : 'arabic') as VerseNumberFormat;
+  });
   const [textColor, setTextColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#fffaf0');
+
+  const toggleVerseNumberFormat = () => {
+    const newFormat = verseNumberFormat === 'arabic' ? 'english' : 'arabic';
+    setVerseNumberFormat(newFormat);
+    localStorage.setItem('verseNumberFormat', newFormat);
+  };
+
+  const { getTextService } = useDigitalKhatt();
+  const textService = useMemo(
+    () => getTextService(layoutType === 'newMadinah' ? 1 : layoutType === 'oldMadinah' ? 2 : 3),
+    [getTextService, layoutType]
+  );
+  const totalPages = textService?.nbPages ?? 604;
 
   const handleWordClick = useCallback(
     (info: WordClickInfo) => {
@@ -103,11 +120,12 @@ export function InteractiveDemo({ layoutType }: InteractiveDemoProps) {
               layoutType={layoutType}
               width={420}
               tajweedEnabled={tajweedEnabled}
+              verseNumberFormat={verseNumberFormat}
               backgroundColor={bgColor}
-              textColor={textColor}
               highlightedWords={currentPageHighlights}
               highlightColor={highlightColor}
               onWordClick={handleWordClick}
+              style={{ color: textColor }}
             />
           </div>
 
@@ -125,9 +143,9 @@ export function InteractiveDemo({ layoutType }: InteractiveDemoProps) {
               ← Prev
             </button>
             <span>
-              Page {pageNumber} / 604
+              Page {pageNumber} / {totalPages}
             </span>
-            <button onClick={() => setPageNumber((p) => Math.min(604, p + 1))} disabled={pageNumber === 604}>
+            <button onClick={() => setPageNumber((p) => Math.min(totalPages, p + 1))} disabled={pageNumber === totalPages}>
               Next →
             </button>
           </div>
@@ -216,6 +234,26 @@ export function InteractiveDemo({ layoutType }: InteractiveDemoProps) {
               />
               Enable Tajweed Colors
             </label>
+          </div>
+
+          {/* Verse number format toggle */}
+          <div style={{ marginBottom: 20 }}>
+            <h4 style={{ marginBottom: 10 }}>Verse Numbers</h4>
+            <button
+              onClick={toggleVerseNumberFormat}
+              style={{
+                padding: '6px 14px',
+                border: '1px solid #ccc',
+                borderRadius: 4,
+                backgroundColor: '#f5f5f5',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: 16,
+              }}
+              title="Toggle verse number format"
+            >
+              {verseNumberFormat === 'arabic' ? '١٢٣ Arabic' : '123 English'}
+            </button>
           </div>
 
           {/* Highlighted words list */}

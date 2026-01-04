@@ -75,8 +75,15 @@ export {
 export { QuranTextService, createQuranTextService, loadQuranTextService } from './quran-text';
 
 // Tajweed
-export type { TajweedClass } from './tajweed';
-export { applyTajweedByPage, DEFAULT_TAJWEED_COLORS } from './tajweed';
+export type { TajweedClass, TajweedColorConfig } from './tajweed';
+export {
+  applyTajweedByPage,
+  DEFAULT_TAJWEED_COLORS,
+  mergeTajweedColors,
+  generateTajweedCSS,
+  generateTajweedCSSVariables,
+  generateTajweedCSSWithVariables,
+} from './tajweed';
 
 // Justification
 export type { QuranTextServiceLike } from './justification';
@@ -106,4 +113,5 @@ export {
   getVerseForWord,
   getWordsForVerse,
   getWordsForVerses,
+  isAyahMarker,
 } from './verse-mapping';

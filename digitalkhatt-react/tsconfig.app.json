@@ -25,10 +25,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    /* Path aliases for direct source imports */
+    /* Path aliases - use compiled output to avoid type conflicts */
     "paths": {
-      "@digitalkhatt/quran-engine": ["../packages/quran-engine/src/index.ts"],
-      "@digitalkhatt/quran-engine/*": ["../packages/quran-engine/src/*"]
+      "@digitalkhatt/quran-engine": ["../packages/quran-engine/dist/index.d.ts"],
+      "@digitalkhatt/quran-engine/*": ["../packages/quran-engine/dist/*"]
     }
   },
   "include": ["src"]

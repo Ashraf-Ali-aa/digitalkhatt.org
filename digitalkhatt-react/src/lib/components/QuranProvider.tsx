@@ -1,15 +1,26 @@
 /**
  * QuranProvider - React Context Provider for DigitalKhatt Engine
  *
- * Handles initialization of HarfBuzz WASM, font loading, and Quran text services
+ * Handles initialization of HarfBuzz WASM, font loading, and Quran text services.
+ * Provides SVG rendering support via SVGPageRenderer from @digitalkhatt/quran-engine.
  */
 
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
-import type { MushafLayoutType, LoadingStatus } from '../core/types';
-import { loadHarfbuzz, loadAndCacheFont, harfbuzzFonts, HarfBuzzFont } from '../core/harfbuzz';
-import { QuranTextService, createQuranTextService, loadQuranTextService } from '../core/quran-text';
-import type { VerseWordMapping } from '../core/verse-mapping';
-import { buildVerseMapping } from '../core/verse-mapping';
+import type { MushafLayoutType, LoadingStatus, TajweedColorConfig } from '../core/types';
+import {
+  loadHarfbuzz,
+  loadAndCacheFont,
+  harfbuzzFonts,
+  HarfBuzzFont,
+  SVGPageRenderer,
+  QuranTextService,
+  createQuranTextService,
+  loadQuranTextService,
+  buildVerseMapping,
+  applyTajweedByPage,
+  mergeTajweedColors,
+} from '@digitalkhatt/quran-engine';
+import type { VerseWordMapping, TajweedClass } from '@digitalkhatt/quran-engine';
 
 // ============================================
 // Types
@@ -30,6 +41,8 @@ export interface QuranProviderConfig {
     oldMadinah?: string[][] | string;
     indoPak15?: string[][] | string;
   };
+  /** Custom tajweed colors (partial override of defaults) */
+  tajweedColors?: TajweedColorConfig;
 }
 
 export interface DigitalKhattContextValue {
@@ -45,8 +58,16 @@ export interface DigitalKhattContextValue {
   getTextService: (layoutType: MushafLayoutType) => QuranTextService | null;
   /** Get verse mapping for a mushaf layout type */
   getVerseMapping: (layoutType: MushafLayoutType) => VerseWordMapping | null;
+  /** Get SVG page renderer for a mushaf layout type */
+  getSVGPageRenderer: (layoutType: MushafLayoutType) => SVGPageRenderer | null;
+  /** Apply tajweed coloring for a page, returns array of Maps (one per line) */
+  applyTajweed: (layoutType: MushafLayoutType, pageIndex: number) => Array<Map<number, string>>;
   /** Available layout types */
   availableLayouts: MushafLayoutType[];
+  /** Current tajweed colors (merged with defaults) */
+  tajweedColors: Record<TajweedClass, string>;
+  /** Update tajweed colors dynamically */
+  setTajweedColors: (colors: TajweedColorConfig) => void;
 }
 
 // ============================================
@@ -73,13 +94,34 @@ export interface QuranProviderProps extends QuranProviderConfig {
   children: React.ReactNode;
 }
 
-export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }: QuranProviderProps) {
+export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, tajweedColors: initialTajweedColors, children }: QuranProviderProps) {
   const [status, setStatus] = useState<LoadingStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [loadedFonts, setLoadedFonts] = useState<Map<MushafLayoutType, HarfBuzzFont>>(new Map());
   const [textServices, setTextServices] = useState<Map<MushafLayoutType, QuranTextService>>(new Map());
   const [verseMappings, setVerseMappings] = useState<Map<MushafLayoutType, VerseWordMapping>>(new Map());
+  const [svgRenderers, setSvgRenderers] = useState<Map<MushafLayoutType, SVGPageRenderer>>(new Map());
   const [availableLayouts, setAvailableLayouts] = useState<MushafLayoutType[]>([]);
+  const [customTajweedColors, setCustomTajweedColors] = useState<TajweedColorConfig>(initialTajweedColors || {});
+
+  // Merged tajweed colors
+  const tajweedColors = useMemo(
+    () => mergeTajweedColors(customTajweedColors),
+    [customTajweedColors]
+  );
+
+  // Apply CSS variables for tajweed colors
+  useEffect(() => {
+    const root = document.documentElement;
+    Object.entries(tajweedColors).forEach(([key, value]) => {
+      root.style.setProperty(`--tajweed-${key}`, value);
+    });
+  }, [tajweedColors]);
+
+  // Update tajweed colors dynamically
+  const setTajweedColors = useCallback((colors: TajweedColorConfig) => {
+    setCustomTajweedColors(prev => ({ ...prev, ...colors }));
+  }, []);
 
   // Initialize engine
   useEffect(() => {
@@ -155,6 +197,24 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
         if (cancelled) return;
 
         setVerseMappings(mappings);
+
+        // 5. Create SVG page renderers for each layout
+        const renderers = new Map<MushafLayoutType, SVGPageRenderer>();
+        for (const [layoutType, font] of fontsMap) {
+          const textService = loadedTextServices.get(layoutType);
+          if (textService) {
+            const renderer = new SVGPageRenderer({
+              font,
+              textService,
+              mushafType: layoutType,
+            });
+            renderers.set(layoutType, renderer);
+          }
+        }
+
+        if (cancelled) return;
+
+        setSvgRenderers(renderers);
         setAvailableLayouts(loadedLayouts);
         setStatus('ready');
       } catch (err) {
@@ -195,6 +255,26 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
     [verseMappings]
   );
 
+  // Get SVG page renderer by layout type
+  const getSVGPageRenderer = useCallback(
+    (layoutType: MushafLayoutType): SVGPageRenderer | null => {
+      return svgRenderers.get(layoutType) || null;
+    },
+    [svgRenderers]
+  );
+
+  // Apply tajweed coloring for a page
+  const applyTajweed = useCallback(
+    (layoutType: MushafLayoutType, pageIndex: number): Array<Map<number, string>> => {
+      const textService = textServices.get(layoutType);
+      if (!textService) {
+        return [];
+      }
+      return applyTajweedByPage(textService, pageIndex);
+    },
+    [textServices]
+  );
+
   // Context value
   const contextValue = useMemo<DigitalKhattContextValue>(
     () => ({
@@ -204,9 +284,13 @@ export function QuranProvider({ wasmUrl, fonts: fontUrls, quranText, children }:
       getFont,
       getTextService,
       getVerseMapping,
+      getSVGPageRenderer,
+      applyTajweed,
       availableLayouts,
+      tajweedColors,
+      setTajweedColors,
     }),
-    [status, error, getFont, getTextService, getVerseMapping, availableLayouts]
+    [status, error, getFont, getTextService, getVerseMapping, getSVGPageRenderer, applyTajweed, availableLayouts, tajweedColors, setTajweedColors]
   );
 
   return <DigitalKhattContext.Provider value={contextValue}>{children}</DigitalKhattContext.Provider>;

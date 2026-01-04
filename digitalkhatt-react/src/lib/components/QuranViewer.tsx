@@ -1,14 +1,15 @@
 /**
  * QuranViewer - Multi-page virtualized Quran viewer component
  *
- * Displays multiple pages with virtualization for performance
+ * Displays multiple pages with virtualization for performance.
+ * Uses SVG rendering via QuranPage components.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { MushafLayoutTypeString, WordClickInfo, VerseClickInfo, HighlightGroup } from '../core/types';
+import type { VerseNumberFormat } from '@digitalkhatt/quran-engine';
 import { QuranPage } from './QuranPage';
 import { useDigitalKhatt } from './QuranProvider';
-import { DEFAULT_TAJWEED_COLORS } from '../core/tajweed';
 
 // ============================================
 // Types
@@ -47,10 +48,8 @@ export interface QuranViewerProps {
   tajweedEnabled?: boolean;
   /** Page background color */
   backgroundColor?: string;
-  /** Text color */
-  textColor?: string;
-  /** Custom Tajweed colors */
-  tajweedColors?: Record<string, string>;
+  /** Verse number format (default: 'arabic') */
+  verseNumberFormat?: VerseNumberFormat;
   /** Gap between pages */
   pageGap?: number;
 
@@ -99,8 +98,7 @@ export function QuranViewer({
   onPageChange,
   tajweedEnabled = true,
   backgroundColor,
-  textColor = '#000000',
-  tajweedColors = DEFAULT_TAJWEED_COLORS,
+  verseNumberFormat = 'arabic',
   pageGap = 20,
   highlightedVerses = [],
   highlightedWords = [],
@@ -336,8 +334,7 @@ export function QuranViewer({
             scale={scale}
             tajweedEnabled={tajweedEnabled}
             backgroundColor={backgroundColor}
-            textColor={textColor}
-            tajweedColors={tajweedColors}
+            verseNumberFormat={verseNumberFormat}
             highlightedVerses={highlightedVerses}
             highlightedWords={getHighlightedWordsForPage(pageNumber)}
             highlightColor={highlightColor}
@@ -360,8 +357,7 @@ export function QuranViewer({
     layoutType,
     tajweedEnabled,
     backgroundColor,
-    textColor,
-    tajweedColors,
+    verseNumberFormat,
     highlightedVerses,
     highlightColor,
     highlightGroups,

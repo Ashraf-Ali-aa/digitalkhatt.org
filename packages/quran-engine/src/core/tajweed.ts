@@ -463,18 +463,61 @@ function applyTajweedForText(
 export type TajweedClass = 'tafkim' | 'lkalkala' | 'lgray' | 'green' | 'red1' | 'red2' | 'red3' | 'red4';
 
 /**
- * Default Tajweed color map
+ * Default Tajweed color map (matching DigitalKhatt standard colors)
  */
 export const DEFAULT_TAJWEED_COLORS: Record<TajweedClass, string> = {
-  tafkim: '#0000FF',      // Blue - Tafkheem (heavy letters)
-  lkalkala: '#FF00FF',    // Magenta - Qalqalah
-  lgray: '#808080',       // Gray - Silent letters
-  green: '#00AA00',       // Green - Idgham/Ikhfa/Iqlab
-  red1: '#FF0000',        // Red - Madd 2 counts
-  red2: '#FF4444',        // Light red - Madd 4-5 counts (jaiz)
-  red3: '#FF8888',        // Lighter red - Madd 4-5 counts (wajib)
-  red4: '#AA0000',        // Dark red - Madd 6 counts (lazim)
+  tafkim: '#006694',      // Blue - Tafkheem (heavy letters)
+  lkalkala: '#00ADEF',    // Cyan - Qalqalah
+  lgray: '#B4B4B4',       // Gray - Silent letters
+  green: '#00A650',       // Green - Idgham/Ikhfa/Iqlab
+  red1: '#C38A08',        // Orange-brown - Madd 2 counts
+  red2: '#F47216',        // Orange - Madd 4-5 counts (jaiz)
+  red3: '#EC008C',        // Magenta-pink - Madd 4-5 counts (wajib)
+  red4: '#8C0000',        // Dark red - Madd 6 counts (lazim)
 };
+
+/**
+ * User-customizable Tajweed color configuration
+ */
+export type TajweedColorConfig = Partial<Record<TajweedClass, string>>;
+
+/**
+ * Merge user colors with defaults
+ */
+export function mergeTajweedColors(userColors?: TajweedColorConfig): Record<TajweedClass, string> {
+  return { ...DEFAULT_TAJWEED_COLORS, ...userColors };
+}
+
+/**
+ * Generate CSS for tajweed colors (for SVG fill property)
+ */
+export function generateTajweedCSS(colors: Record<TajweedClass, string> = DEFAULT_TAJWEED_COLORS): string {
+  return Object.entries(colors)
+    .map(([className, color]) => `.${className} { fill: ${color}; }`)
+    .join('\n');
+}
+
+/**
+ * Generate CSS custom properties (variables) for tajweed colors
+ */
+export function generateTajweedCSSVariables(
+  colors: Record<TajweedClass, string> = DEFAULT_TAJWEED_COLORS,
+  prefix: string = 'tajweed'
+): string {
+  return Object.entries(colors)
+    .map(([className, color]) => `--${prefix}-${className}: ${color};`)
+    .join('\n');
+}
+
+/**
+ * Generate CSS that uses CSS custom properties
+ */
+export function generateTajweedCSSWithVariables(prefix: string = 'tajweed'): string {
+  const classes: TajweedClass[] = ['tafkim', 'lkalkala', 'lgray', 'green', 'red1', 'red2', 'red3', 'red4'];
+  return classes
+    .map((className) => `.${className} { fill: var(--${prefix}-${className}); }`)
+    .join('\n');
+}
 
 /**
  * Apply Tajweed coloring to a page

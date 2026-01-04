@@ -3,10 +3,14 @@
  *
  * A React component library for rendering Quran text with proper
  * Arabic typography using the DigitalKhatt engine.
+ * Now uses SVG rendering via @digitalkhatt/quran-engine.
  */
 
+// Import CSS styles
+import './styles/svg-renderer.css';
+
 // ============================================
-// Core Types
+// Core Types - Re-export from quran-engine
 // ============================================
 export type {
   MushafLayoutType,
@@ -27,19 +31,31 @@ export type {
   QuranTextData,
   VerseRef,
   WordRef,
-  WordClickInfo,
-  VerseClickInfo,
-  HighlightStyle,
-  HighlightGroup,
-  TajweedColorMap,
   WordRect,
   LineRect,
   PageFormat,
   RenderResult,
   LoadingStatus,
-} from './core/types';
+  SVGPageRenderOptions,
+  SVGWordClickInfo,
+  SVGHighlightGroup,
+  PageRenderResult,
+  VerseNumberFormat,
+  VerseWordMapping,
+  WordPosition,
+  GlyphBounds,
+  GlyphPathWithBounds,
+  TajweedClass,
+  TajweedColorConfig,
+} from '@digitalkhatt/quran-engine';
 
-// DigitalKhattContextValue is exported from QuranProvider
+// Local types that extend quran-engine
+export type {
+  WordClickInfo,
+  VerseClickInfo,
+  HighlightStyle,
+  HighlightGroup,
+} from './core/types';
 
 export {
   LAYOUT_TYPE_MAP,
@@ -51,24 +67,39 @@ export {
 } from './core/types';
 
 // ============================================
-// Core Services
+// Core Services - Re-export from quran-engine
 // ============================================
-export { loadHarfbuzz, loadAndCacheFont } from './core/harfbuzz';
-export type { HarfBuzzFont, HarfBuzzExports } from './core/harfbuzz';
-
-export { QuranTextService, createQuranTextService } from './core/quran-text';
-export { applyTajweedByPage, DEFAULT_TAJWEED_COLORS } from './core/tajweed';
-export { justifyLine, analyzeLineForJust } from './core/justification';
-export type { VerseWordMapping, WordPosition } from './core/verse-mapping';
-export { buildVerseMapping, getVerseForWord, getWordsForVerse, getWordsForVerses } from './core/verse-mapping';
-
-// ============================================
-// Canvas Utilities
-// ============================================
-export { CanvasRenderer } from './canvas/CanvasRenderer';
-export type { RenderOptions } from './canvas/CanvasRenderer';
-export { HitTestManager } from './canvas/HitTestManager';
-export { GlyphCache, glyphCache } from './canvas/GlyphCache';
+export {
+  loadHarfbuzz,
+  loadAndCacheFont,
+  harfbuzzFonts,
+  HarfBuzzExports,
+  HarfBuzzBlob,
+  HarfBuzzFace,
+  HarfBuzzFont,
+  HarfBuzzBuffer,
+  shape,
+  getWidth,
+  QuranTextService,
+  createQuranTextService,
+  loadQuranTextService,
+  applyTajweedByPage,
+  DEFAULT_TAJWEED_COLORS,
+  mergeTajweedColors,
+  generateTajweedCSS,
+  generateTajweedCSSVariables,
+  generateTajweedCSSWithVariables,
+  justifyLine,
+  analyzeLineForJust,
+  buildVerseMapping,
+  getVerseForWord,
+  getWordsForVerse,
+  getWordsForVerses,
+  isAyahMarker,
+  SVGPageRenderer,
+  SVGLineRenderer,
+  JustStyleEnum,
+} from '@digitalkhatt/quran-engine';
 
 // ============================================
 // React Components
@@ -82,4 +113,9 @@ export type { QuranPageProps } from './components/QuranPage';
 export { QuranViewer } from './components/QuranViewer';
 export type { QuranViewerProps, QuranViewerRef } from './components/QuranViewer';
 
+// ============================================
+// React Hooks
+// ============================================
 export { useDigitalKhatt } from './components/QuranProvider';
+export { useTajweedColors } from './hooks/useTajweedColors';
+export type { TajweedColorInfo, UseTajweedColorsReturn } from './hooks/useTajweedColors';

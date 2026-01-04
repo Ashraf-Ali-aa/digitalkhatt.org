@@ -8,6 +8,8 @@ import { SinglePageDemo } from './demo/SinglePageDemo';
 import { ViewerDemo } from './demo/ViewerDemo';
 import { InteractiveDemo } from './demo/InteractiveDemo';
 import { quranText as indoPakText } from './lib/data/quran_text_indopak_15';
+import { quranText as newMadinahText } from './lib/data/quran_text_madina';
+import { quranText as oldMadinahText } from './lib/data/quran_text_old_madinah';
 import './App.css';
 
 type DemoType = 'single' | 'viewer' | 'interactive';
@@ -21,12 +23,26 @@ const FONT_URLS = {
 };
 
 const QURAN_TEXT = {
+  newMadinah: newMadinahText,
+  oldMadinah: oldMadinahText,
   indoPak15: indoPakText,
 };
 
 function App() {
   const [demo, setDemo] = useState<DemoType>('single');
-  const [layoutType, setLayoutType] = useState<MushafLayoutTypeString>('indoPak15');
+  const [layoutType, setLayoutType] = useState<MushafLayoutTypeString>(() => {
+    const saved = localStorage.getItem('digitalkhatt-layout');
+    if (saved && ['newMadinah', 'oldMadinah', 'indoPak15'].includes(saved)) {
+      return saved as MushafLayoutTypeString;
+    }
+    return 'oldMadinah';
+  });
+
+  const handleLayoutChange = (newLayout: MushafLayoutTypeString) => {
+    setLayoutType(newLayout);
+    localStorage.setItem("digitalkhatt-layout", newLayout);
+    window.location.reload();
+  };
 
   const layoutOptions: { value: MushafLayoutTypeString; label: string }[] = [
     { value: 'newMadinah', label: 'New Madinah' },
@@ -70,7 +86,7 @@ function App() {
             <label>Layout: </label>
             <select
               value={layoutType}
-              onChange={(e) => setLayoutType(e.target.value as MushafLayoutTypeString)}
+              onChange={(e) => handleLayoutChange(e.target.value as MushafLayoutTypeString)}
             >
               {layoutOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>

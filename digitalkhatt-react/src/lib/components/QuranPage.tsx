@@ -1,26 +1,26 @@
 /**
  * QuranPage - React component for rendering a single Quran page
  *
- * Uses Canvas 2D for rendering with HarfBuzz text shaping
+ * Uses SVG rendering via SVGPageRenderer from @digitalkhatt/quran-engine
  */
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState } from 'react';
 import type {
   MushafLayoutType,
   MushafLayoutTypeString,
   WordClickInfo,
   VerseClickInfo,
-  WordRect,
   PageFormat,
   HighlightGroup,
 } from '../core/types';
 import { LAYOUT_TYPE_MAP, PAGE_WIDTH } from '../core/types';
 import { useDigitalKhatt } from './QuranProvider';
-import { CanvasRenderer } from '../canvas/CanvasRenderer';
-import type { RenderOptions } from '../canvas/CanvasRenderer';
-import { HitTestManager } from '../canvas/HitTestManager';
-import { DEFAULT_TAJWEED_COLORS } from '../core/tajweed';
-import { getWordsForVerse } from '../core/verse-mapping';
+import type { SVGWordClickInfo, SVGHighlightGroup, VerseNumberFormat } from '@digitalkhatt/quran-engine';
+import { JustStyleEnum, getWordsForVerse } from '@digitalkhatt/quran-engine';
+import { AyaGlyph, getAyaSvgGroup } from './AyaGlyph';
+
+// Import CSS styles for tajweed
+import '../styles/svg-renderer.css';
 
 // ============================================
 // Types
@@ -33,7 +33,7 @@ export interface QuranPageProps {
   layoutType: MushafLayoutTypeString;
 
   // Dimensions
-  /** Canvas width in pixels (default: 400) */
+  /** Page width in pixels (default: 400) */
   width?: number;
   /** Scale factor (default: 1) */
   scale?: number;
@@ -43,10 +43,8 @@ export interface QuranPageProps {
   tajweedEnabled?: boolean;
   /** Page background color */
   backgroundColor?: string;
-  /** Text color (default: black) */
-  textColor?: string;
-  /** Custom Tajweed colors */
-  tajweedColors?: Record<string, string>;
+  /** Verse number format (default: 'arabic') */
+  verseNumberFormat?: VerseNumberFormat;
 
   // Highlighting
   /** Verses to highlight (single color, uses highlightColor) */
@@ -91,27 +89,39 @@ export function QuranPage({
   scale = 1,
   tajweedEnabled = true,
   backgroundColor,
-  textColor = '#000000',
-  tajweedColors = DEFAULT_TAJWEED_COLORS,
+  verseNumberFormat = 'arabic',
   highlightedVerses = [],
   highlightedWords = [],
   highlightColor = 'rgba(255, 255, 0, 0.3)',
   highlightGroups = [],
   onWordClick,
   onVerseClick,
-  onWordHover,
+  // onWordHover - TODO: implement hover support for SVG
   onRenderComplete,
   enableAccessibility = true,
   ariaLabel,
   className,
   style,
 }: QuranPageProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<CanvasRenderer | null>(null);
-  const hitTestRef = useRef<HitTestManager>(new HitTestManager());
-  const [hoveredWord, setHoveredWord] = useState<WordRect | null>(null);
+  // Container ref for DOM injection
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Store word elements for highlighting
+  const wordElementsRef = useRef<Map<string, SVGElement> | null>(null);
+  // Track if aya glyph SVG is mounted
+  const [ayaGlyphMounted, setAyaGlyphMounted] = useState(false);
 
-  const { status, isReady, getFont, getTextService, getVerseMapping } = useDigitalKhatt();
+  const { status, isReady, getTextService, getVerseMapping, getSVGPageRenderer, applyTajweed } = useDigitalKhatt();
+
+  // Effect to detect when AyaGlyph is mounted
+  // Reset to false first when layoutType changes, then set to true after DOM is ready
+  useEffect(() => {
+    setAyaGlyphMounted(false);
+    // Small delay to ensure DOM is ready with new AyaGlyph
+    const timer = setTimeout(() => {
+      setAyaGlyphMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [layoutType]);
 
   // Convert layout type string to enum
   const mushafType: MushafLayoutType = LAYOUT_TYPE_MAP[layoutType];
@@ -128,19 +138,19 @@ export function QuranPage({
     };
   }, [width, scale]);
 
-  // Get font, text service, and verse mapping
-  const font = useMemo(() => getFont(mushafType), [getFont, mushafType]);
+  // Get text service, verse mapping, and SVG renderer
   const textService = useMemo(() => getTextService(mushafType), [getTextService, mushafType]);
   const verseMapping = useMemo(() => getVerseMapping(mushafType), [getVerseMapping, mushafType]);
+  const svgRenderer = useMemo(() => getSVGPageRenderer(mushafType), [getSVGPageRenderer, mushafType]);
 
-  // Convert highlightGroups and legacy props to renderer format
-  const rendererHighlightGroups = useMemo(() => {
+  // Convert highlightGroups and legacy props to SVG highlight format
+  const svgHighlightGroups = useMemo((): SVGHighlightGroup[] => {
     const pageIndex = pageNumber - 1;
-    const groups: Array<{ words: Array<{ lineIndex: number; wordIndex: number }>; color: string }> = [];
+    const groups: SVGHighlightGroup[] = [];
 
     // Process highlightGroups prop
     for (const group of highlightGroups) {
-      const words: Array<{ lineIndex: number; wordIndex: number }> = [];
+      const words: Array<{ page: number; line: number; word: number }> = [];
 
       // Add words from verses
       if (group.verses && verseMapping) {
@@ -148,7 +158,7 @@ export function QuranPage({
           const verseWords = getWordsForVerse(verseMapping, verse.surah, verse.ayah);
           for (const w of verseWords) {
             if (w.page === pageIndex) {
-              words.push({ lineIndex: w.line, wordIndex: w.word });
+              words.push({ page: pageIndex, line: w.line, word: w.word });
             }
           }
         }
@@ -158,7 +168,7 @@ export function QuranPage({
       if (group.words) {
         for (const w of group.words) {
           if (w.page === pageIndex) {
-            words.push({ lineIndex: w.line, wordIndex: w.word });
+            words.push({ page: pageIndex, line: w.line, word: w.word });
           }
         }
       }
@@ -170,12 +180,12 @@ export function QuranPage({
 
     // Process legacy highlightedVerses prop
     if (highlightedVerses.length > 0 && verseMapping) {
-      const words: Array<{ lineIndex: number; wordIndex: number }> = [];
+      const words: Array<{ page: number; line: number; word: number }> = [];
       for (const verse of highlightedVerses) {
         const verseWords = getWordsForVerse(verseMapping, verse.surah, verse.ayah);
         for (const w of verseWords) {
           if (w.page === pageIndex) {
-            words.push({ lineIndex: w.line, wordIndex: w.word });
+            words.push({ page: pageIndex, line: w.line, word: w.word });
           }
         }
       }
@@ -186,20 +196,61 @@ export function QuranPage({
 
     // Process legacy highlightedWords prop
     if (highlightedWords.length > 0) {
-      const words = highlightedWords.map((w) => ({ lineIndex: w.line, wordIndex: w.word }));
+      const words = highlightedWords.map((w) => ({ page: pageIndex, line: w.line, word: w.word }));
       groups.push({ words, color: highlightColor });
     }
 
     return groups;
   }, [pageNumber, highlightGroups, highlightedVerses, highlightedWords, highlightColor, verseMapping]);
 
-  // Render page
-  useEffect(() => {
-    if (!isReady || !font || !textService || !canvasRef.current) {
+  // Handle word click from SVGPageRenderer
+  const handleSVGWordClick = useCallback(
+    (info: SVGWordClickInfo) => {
+      // Get verse reference for this word from verse mapping
+      let surah: number | undefined;
+      let ayah: number | undefined;
+
+      if (verseMapping) {
+        const key = `${info.pageIndex}:${info.lineIndex}:${info.wordIndex}`;
+        const verseRef = verseMapping.wordToVerse.get(key);
+        if (verseRef) {
+          surah = verseRef.surah;
+          ayah = verseRef.ayah;
+        }
+      }
+
+      // Create WordClickInfo
+      const wordClickInfo: WordClickInfo = {
+        pageNumber,
+        lineIndex: info.lineIndex,
+        wordIndex: info.wordIndex,
+        text: info.text,
+        surah,
+        ayah,
+      };
+
+      // Fire word click
+      onWordClick?.(wordClickInfo);
+
+      // Fire verse click if word has verse info
+      if (onVerseClick && surah !== undefined && ayah !== undefined) {
+        onVerseClick({
+          surah,
+          ayah,
+          pageNumber,
+        });
+      }
+    },
+    [pageNumber, verseMapping, onWordClick, onVerseClick]
+  );
+
+  // Render SVG content into container
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || !svgRenderer || !isReady || !textService || !ayaGlyphMounted) {
       return;
     }
 
-    const canvas = canvasRef.current;
     const pageIndex = pageNumber - 1;
 
     // Validate page index
@@ -208,134 +259,70 @@ export function QuranPage({
       return;
     }
 
-    // Set canvas size
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    // Create or reuse renderer
-    if (!rendererRef.current || rendererRef.current.getContext().canvas !== canvas) {
-      rendererRef.current = new CanvasRenderer(canvas, font, textService);
+    // Clear previous content
+    while (container.firstChild) {
+      container.removeChild(container.lastChild!);
     }
+    wordElementsRef.current = null;
 
-    // Render options
-    const options: RenderOptions = {
-      backgroundColor,
-      textColor,
-      tajweedEnabled,
-      tajweedColors,
-      highlightGroups: rendererHighlightGroups,
-      verseMapping,
-    };
+    // Get the ayaSvgGroup for Madinah layouts (provides verse number frame decoration)
+    const ayaSvgGroup = getAyaSvgGroup();
 
     // Render the page
-    const result = rendererRef.current.renderPage(pageIndex, viewport, options);
+    const result = svgRenderer.renderPage(pageIndex, viewport, {
+      tajweedEnabled,
+      verseNumberFormat,
+      justStyle: JustStyleEnum.XScale,
+      applyTajweed: (pi: number) => applyTajweed(mushafType, pi),
+      enableWordClick: !!(onWordClick || onVerseClick),
+      onWordClick: handleSVGWordClick,
+      ayaSvgGroup,
+    });
 
-    // Update hit test manager
-    hitTestRef.current.setWordRects(result.wordRects);
-    hitTestRef.current.setLineRects(result.lineRects);
+    // Append line elements to container
+    for (const lineElement of result.lineElements) {
+      container.appendChild(lineElement);
+    }
+
+    // Store word elements for highlighting
+    wordElementsRef.current = result.wordElements || null;
 
     // Notify completion
     onRenderComplete?.();
+
+    // Cleanup function
+    return () => {
+      while (container.firstChild) {
+        container.removeChild(container.lastChild!);
+      }
+      wordElementsRef.current = null;
+    };
   }, [
     isReady,
-    font,
+    svgRenderer,
     textService,
     pageNumber,
     viewport,
-    backgroundColor,
-    textColor,
     tajweedEnabled,
-    tajweedColors,
-    rendererHighlightGroups,
-    verseMapping,
+    verseNumberFormat,
+    mushafType,
+    applyTajweed,
+    onWordClick,
+    onVerseClick,
+    handleSVGWordClick,
     onRenderComplete,
+    ayaGlyphMounted,
   ]);
 
-  // Convert canvas coordinates to hit test coordinates
-  const getCanvasCoords = useCallback((event: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in event ? event.touches[0]?.clientX : event.clientX;
-    const clientY = 'touches' in event ? event.touches[0]?.clientY : event.clientY;
-
-    if (clientX === undefined || clientY === undefined) return null;
-
-    // Account for CSS scaling
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
-  }, []);
-
-  // Create word click info from word rect
-  const createWordClickInfo = useCallback(
-    (wordRect: WordRect): WordClickInfo => {
-      return {
-        pageNumber,
-        lineIndex: wordRect.lineIndex,
-        wordIndex: wordRect.wordIndex,
-        text: wordRect.text,
-        surah: wordRect.surah,
-        ayah: wordRect.ayah,
-      };
-    },
-    [pageNumber]
-  );
-
-  // Handle click
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      const coords = getCanvasCoords(event);
-      if (!coords) return;
-
-      const { word } = hitTestRef.current.hitTest(coords.x, coords.y);
-
-      if (word) {
-        if (onWordClick) {
-          onWordClick(createWordClickInfo(word));
-        }
-
-        // Also fire verse click if word has surah/ayah info
-        if (onVerseClick && word.surah !== undefined && word.ayah !== undefined) {
-          onVerseClick({
-            surah: word.surah,
-            ayah: word.ayah,
-            pageNumber,
-          });
-        }
-      }
-    },
-    [getCanvasCoords, createWordClickInfo, onWordClick, onVerseClick, pageNumber]
-  );
-
-  // Handle mouse move (hover)
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      const coords = getCanvasCoords(event);
-      if (!coords) return;
-
-      const { word } = hitTestRef.current.hitTest(coords.x, coords.y);
-
-      if (word !== hoveredWord) {
-        setHoveredWord(word);
-        onWordHover?.(word ? createWordClickInfo(word) : null);
-      }
-    },
-    [getCanvasCoords, hoveredWord, createWordClickInfo, onWordHover]
-  );
-
-  // Handle mouse leave
-  const handleMouseLeave = useCallback(() => {
-    if (hoveredWord) {
-      setHoveredWord(null);
-      onWordHover?.(null);
+  // Apply highlights when highlightGroups change
+  useEffect(() => {
+    if (!wordElementsRef.current || !svgRenderer) {
+      return;
     }
-  }, [hoveredWord, onWordHover]);
+
+    const pageIndex = pageNumber - 1;
+    svgRenderer.applyHighlights(wordElementsRef.current, svgHighlightGroups, pageIndex);
+  }, [svgHighlightGroups, svgRenderer, pageNumber]);
 
   // Loading state
   if (status === 'loading') {
@@ -379,7 +366,7 @@ export function QuranPage({
   }
 
   // Not ready yet
-  if (!isReady || !font || !textService) {
+  if (!isReady || !svgRenderer || !textService) {
     return (
       <div
         className={className}
@@ -394,26 +381,29 @@ export function QuranPage({
 
   return (
     <div
-      className={className}
+      className={`quran-page ${className || ''}`}
       style={{
         position: 'relative',
         width: viewport.width,
         height: viewport.height,
+        backgroundColor,
+        fontSize: viewport.fontSize,
         ...style,
       }}
+      aria-label={ariaLabel || `Quran page ${pageNumber}`}
+      role="img"
     >
-      <canvas
-        ref={canvasRef}
-        onClick={handleClick}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+      {/* Hidden SVG element for verse number frames (Madinah layouts) */}
+      <AyaGlyph layoutType={layoutType} />
+
+      {/* Container for SVG line elements */}
+      <div
+        ref={containerRef}
+        className="quran-page-content"
         style={{
           width: '100%',
           height: '100%',
-          cursor: hoveredWord ? 'pointer' : 'default',
         }}
-        aria-label={ariaLabel || `Quran page ${pageNumber}`}
-        role="img"
       />
 
       {/* Accessibility: Hidden text for screen readers */}

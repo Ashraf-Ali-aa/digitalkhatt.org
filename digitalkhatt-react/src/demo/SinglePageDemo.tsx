@@ -2,8 +2,8 @@
  * SinglePageDemo - Demonstrates a single Quran page
  */
 
-import React, { useState, useCallback } from 'react';
-import { QuranPage, type WordClickInfo, type MushafLayoutTypeString } from '../lib';
+import React, { useState, useCallback, useMemo } from 'react';
+import { QuranPage, type WordClickInfo, type MushafLayoutTypeString, type VerseNumberFormat, useDigitalKhatt } from '../lib';
 
 interface SinglePageDemoProps {
   layoutType: MushafLayoutTypeString;
@@ -15,8 +15,23 @@ export function SinglePageDemo({ layoutType }: SinglePageDemoProps) {
   const [hoveredWord, setHoveredWord] = useState<WordClickInfo | null>(null);
   const [tajweedEnabled, setTajweedEnabled] = useState(true);
   const [scale, setScale] = useState(1);
+  const [verseNumberFormat, setVerseNumberFormat] = useState<VerseNumberFormat>(() => {
+    const saved = localStorage.getItem('verseNumberFormat');
+    return (saved === 'english' ? 'english' : 'arabic') as VerseNumberFormat;
+  });
 
-  const totalPages = layoutType === 'indoPak15' ? 604 : 604; // Adjust based on layout
+  const toggleVerseNumberFormat = () => {
+    const newFormat = verseNumberFormat === 'arabic' ? 'english' : 'arabic';
+    setVerseNumberFormat(newFormat);
+    localStorage.setItem('verseNumberFormat', newFormat);
+  };
+
+  const { getTextService } = useDigitalKhatt();
+  const textService = useMemo(
+    () => getTextService(layoutType === 'newMadinah' ? 1 : layoutType === 'oldMadinah' ? 2 : 3),
+    [getTextService, layoutType]
+  );
+  const totalPages = textService?.nbPages ?? 604;
 
   const handleWordClick = useCallback((info: WordClickInfo) => {
     setSelectedWord(info);
@@ -98,6 +113,23 @@ export function SinglePageDemo({ layoutType }: SinglePageDemoProps) {
 
         <span>|</span>
 
+        <button
+          onClick={toggleVerseNumberFormat}
+          style={{
+            padding: '4px 10px',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            backgroundColor: '#f5f5f5',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+          title="Toggle verse number format"
+        >
+          {verseNumberFormat === 'arabic' ? '١٢٣' : '123'}
+        </button>
+
+        <span>|</span>
+
         <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           Scale:
           <input
@@ -130,6 +162,7 @@ export function SinglePageDemo({ layoutType }: SinglePageDemoProps) {
           width={400}
           scale={scale}
           tajweedEnabled={tajweedEnabled}
+          verseNumberFormat={verseNumberFormat}
           backgroundColor="#fff9f0"
           highlightedWords={highlightedWords}
           highlightColor="rgba(255, 200, 0, 0.4)"
