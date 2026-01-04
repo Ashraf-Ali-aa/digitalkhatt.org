@@ -4,7 +4,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
-    "types": []
+    "types": [],
+    "paths": {
+      "@digitalkhatt/quran-engine": ["node_modules/@digitalkhatt/quran-engine/dist/index"],
+      "@digitalkhatt/quran-engine/*": ["node_modules/@digitalkhatt/quran-engine/dist/*"]
+    }
   },
   "files": [
     "src/main.ts"
