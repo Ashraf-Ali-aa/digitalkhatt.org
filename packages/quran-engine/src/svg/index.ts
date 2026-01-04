@@ -15,6 +15,7 @@ export {
   type SVGRenderOptions,
   type SajdaRenderInfo,
   type VerseNumberFormat,
+  type LineBounds,
 } from './SVGLineRenderer';
 export { renderLineToSVG, type LineRenderConfig } from './renderLine';
 export {

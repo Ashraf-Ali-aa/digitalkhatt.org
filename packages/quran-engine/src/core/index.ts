@@ -52,6 +52,7 @@ export {
 } from './types';
 
 // HarfBuzz
+export type { GlyphBounds, GlyphPathWithBounds } from './harfbuzz';
 export {
   HarfBuzzExports,
   HarfBuzzBlob,

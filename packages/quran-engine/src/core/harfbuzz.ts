@@ -245,6 +245,22 @@ export class HarfBuzzFace {
 }
 
 /**
+ * Glyph bounds information
+ */
+export interface GlyphBounds {
+  minY: number;
+  maxY: number;
+}
+
+/**
+ * Result of glyph-to-path conversion with bounds
+ */
+export interface GlyphPathWithBounds {
+  path: string;
+  bounds: GlyphBounds;
+}
+
+/**
  * HarfBuzz Font wrapper with glyph-to-path support
  */
 export class HarfBuzzFont {
@@ -252,6 +268,8 @@ export class HarfBuzzFont {
   readonly unitsPerEM: number;
   private drawFuncsPtr: Pointer | null = null;
   private pathBuffer = '';
+  private minY = 0;
+  private maxY = 0;
 
   constructor(face: HarfBuzzFace) {
     if (!hb) throw new Error('HarfBuzz not initialized');
@@ -268,6 +286,8 @@ export class HarfBuzzFont {
   glyphToSvgPath(glyphId: number): string {
     if (!hb) throw new Error('HarfBuzz not initialized');
     this.pathBuffer = '';
+    this.minY = Infinity;
+    this.maxY = -Infinity;
     (hb.exports.hb_font_draw_glyph as (fontPtr: Pointer, glyphId: number, drawFuncsPtr: Pointer, userData: number) => void)(
       this.ptr,
       glyphId,
@@ -277,14 +297,48 @@ export class HarfBuzzFont {
     return this.pathBuffer;
   }
 
+  /**
+   * Convert glyph to SVG path and return bounds
+   * @param glyphId - The glyph ID to render
+   * @returns Object containing path string and Y bounds
+   */
+  glyphToSvgPathWithBounds(glyphId: number): GlyphPathWithBounds {
+    if (!hb) throw new Error('HarfBuzz not initialized');
+    this.pathBuffer = '';
+    this.minY = Infinity;
+    this.maxY = -Infinity;
+    (hb.exports.hb_font_draw_glyph as (fontPtr: Pointer, glyphId: number, drawFuncsPtr: Pointer, userData: number) => void)(
+      this.ptr,
+      glyphId,
+      this.drawFuncsPtr!,
+      0
+    );
+    // Handle empty glyphs (spaces, etc.)
+    const bounds: GlyphBounds = {
+      minY: this.minY === Infinity ? 0 : this.minY,
+      maxY: this.maxY === -Infinity ? 0 : this.maxY,
+    };
+    return { path: this.pathBuffer, bounds };
+  }
+
+  /**
+   * Update minY and maxY with a Y coordinate
+   */
+  private updateYBounds(y: number): void {
+    if (y < this.minY) this.minY = y;
+    if (y > this.maxY) this.maxY = y;
+  }
+
   private initializeDraw(): void {
     if (!hb) throw new Error('HarfBuzz not initialized');
 
     const moveTo = (_dfuncs: Pointer, _draw_data: Pointer, _draw_state: Pointer, to_x: number, to_y: number) => {
       this.pathBuffer += `M${to_x},${to_y}`;
+      this.updateYBounds(to_y);
     };
     const lineTo = (_dfuncs: Pointer, _draw_data: Pointer, _draw_state: Pointer, to_x: number, to_y: number) => {
       this.pathBuffer += `L${to_x},${to_y}`;
+      this.updateYBounds(to_y);
     };
     const cubicTo = (
       _dfuncs: Pointer,
@@ -298,6 +352,9 @@ export class HarfBuzzFont {
       to_y: number
     ) => {
       this.pathBuffer += `C${c1_x},${c1_y} ${c2_x},${c2_y} ${to_x},${to_y}`;
+      this.updateYBounds(c1_y);
+      this.updateYBounds(c2_y);
+      this.updateYBounds(to_y);
     };
     const quadTo = (
       _dfuncs: Pointer,
@@ -309,6 +366,8 @@ export class HarfBuzzFont {
       to_y: number
     ) => {
       this.pathBuffer += `Q${c_x},${c_y} ${to_x},${to_y}`;
+      this.updateYBounds(c_y);
+      this.updateYBounds(to_y);
     };
     const closePath = () => {
       this.pathBuffer += 'Z';

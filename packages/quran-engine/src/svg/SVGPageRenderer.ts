@@ -450,9 +450,22 @@ export class SVGPageRenderer {
     // After the scale(x, -y) transform:
     // - Harakat (positive Y in font units) become negative Y in screen coords
     // - Descenders (negative Y in font units) become positive Y in screen coords
-    // Arabic text typically needs ~75% of space above baseline for harakat, ~25% below for descenders.
-    // viewBoxY sets the top edge; we want the baseline (Y=0 after transform) at ~75% down from top.
-    const viewBoxY = -viewBoxHeight * 0.75;
+    //
+    // Use actual bounds from rendered glyphs when available.
+    // Center the content vertically within the viewBox to ensure nothing is clipped.
+    // Fallback to 75% ratio if bounds are not available.
+    let viewBoxY: number;
+    if (result.bounds) {
+      // Calculate actual content height
+      const contentHeight = result.bounds.maxY - result.bounds.minY;
+      // Center the content vertically within the viewBox
+      // viewBoxY should position the top of the viewBox such that content is centered
+      const verticalPadding = (viewBoxHeight - contentHeight) / 2;
+      viewBoxY = result.bounds.minY - verticalPadding;
+    } else {
+      // Fallback: baseline at ~75% down from top
+      viewBoxY = -viewBoxHeight * 0.75;
+    }
     result.svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     result.svg.setAttribute('width', svgWidth.toString());
     result.svg.setAttribute('height', svgHeight.toString());

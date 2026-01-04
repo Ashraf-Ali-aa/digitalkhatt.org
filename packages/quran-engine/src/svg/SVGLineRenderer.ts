@@ -6,6 +6,7 @@
 
 import type { HBFeature, GlyphInformation, MushafLayoutType } from '../core/types';
 import { SpaceType, MushafLayoutType as MushafLayoutTypeEnum } from '../core/types';
+import type { GlyphBounds } from '../core/harfbuzz';
 import {
   HarfBuzzBuffer,
   HarfBuzzFont,
@@ -151,6 +152,16 @@ export interface WordBounds {
 }
 
 /**
+ * Line Y bounds in scaled coordinates
+ */
+export interface LineBounds {
+  /** Minimum Y coordinate in scaled units (topmost point after Y flip) */
+  minY: number;
+  /** Maximum Y coordinate in scaled units (bottommost point after Y flip) */
+  maxY: number;
+}
+
+/**
  * Result of SVG line rendering
  */
 export interface SVGLineRenderResult {
@@ -168,6 +179,8 @@ export interface SVGLineRenderResult {
   sajdaEndPos?: number;
   /** Word boundaries for click handling */
   wordBounds?: WordBounds[];
+  /** Y bounds of all rendered glyphs in scaled coordinates */
+  bounds?: LineBounds;
 }
 
 
@@ -179,6 +192,7 @@ export interface SVGLineRenderResult {
 export class SVGLineRenderer {
   private font: HarfBuzzFont;
   private glyphPathCache = new Map<number, string | string[]>();
+  private glyphBoundsCache = new Map<number, GlyphBounds>();
 
   constructor(font: HarfBuzzFont) {
     this.font = font;
@@ -240,6 +254,10 @@ export class SVGLineRenderer {
     const wordBoundsMap = new Map<number, { startX: number; endX: number }>();
     let currentWordIndex = -1;
 
+    // Track line Y bounds (in glyph units, before scaling)
+    let lineMinY = Infinity;
+    let lineMaxY = -Infinity;
+
     // Render glyphs in reverse order (RTL)
     for (let glyphIndex = shapedGlyphs.length - 1; glyphIndex >= 0; glyphIndex--) {
       const glyph = shapedGlyphs[glyphIndex];
@@ -265,11 +283,14 @@ export class SVGLineRenderer {
         }
       }
 
-      // Get or compute glyph path
+      // Get or compute glyph path and bounds
       let pathString = this.glyphPathCache.get(glyph.GlyphId);
+      let glyphBounds = this.glyphBoundsCache.get(glyph.GlyphId);
       const isAyaNumberChar = lineText.charCodeAt(glyph.Cluster) === 0x06dd;
       if (pathString === undefined) {
-        pathString = this.font.glyphToSvgPath(glyph.GlyphId);
+        const pathWithBounds = this.font.glyphToSvgPathWithBounds(glyph.GlyphId);
+        pathString = pathWithBounds.path;
+        glyphBounds = pathWithBounds.bounds;
 
         // Handle aya number glyphs (split path for digit overlay if needed)
         if (isAyaNumberChar && ayaDigitCount > 0) {
@@ -280,6 +301,15 @@ export class SVGLineRenderer {
         }
 
         this.glyphPathCache.set(glyph.GlyphId, pathString);
+        this.glyphBoundsCache.set(glyph.GlyphId, glyphBounds);
+      }
+
+      // Update line Y bounds with this glyph's bounds (considering YOffset)
+      if (glyphBounds) {
+        const glyphMinY = glyphBounds.minY + glyph.YOffset;
+        const glyphMaxY = glyphBounds.maxY + glyph.YOffset;
+        if (glyphMinY < lineMinY) lineMinY = glyphMinY;
+        if (glyphMaxY > lineMaxY) lineMaxY = glyphMaxY;
       }
 
       // Track sajda positions
@@ -413,6 +443,20 @@ export class SVGLineRenderer {
       }
     }
 
+    // Calculate scaled line bounds
+    // After the scale(x, -y) transform:
+    // - Original maxY (top in font coords) becomes -maxY (top in screen coords, negative)
+    // - Original minY (bottom in font coords) becomes -minY (bottom in screen coords, less negative)
+    // So in screen coords: minY = -originalMaxY, maxY = -originalMinY
+    let bounds: LineBounds | undefined;
+    if (lineMinY !== Infinity && lineMaxY !== -Infinity) {
+      const scale = glyphScale * yScale;
+      bounds = {
+        minY: -lineMaxY * scale, // Top edge in screen coords (most negative)
+        maxY: -lineMinY * scale, // Bottom edge in screen coords (least negative)
+      };
+    }
+
     return {
       svg,
       lineGroup,
@@ -421,6 +465,7 @@ export class SVGLineRenderer {
       sajdaStartPos,
       sajdaEndPos,
       wordBounds,
+      bounds,
     };
   }
 
@@ -527,9 +572,10 @@ export class SVGLineRenderer {
   }
 
   /**
-   * Clear the glyph path cache
+   * Clear the glyph path and bounds cache
    */
   clearCache(): void {
     this.glyphPathCache.clear();
+    this.glyphBoundsCache.clear();
   }
 }
