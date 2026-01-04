@@ -3,10 +3,9 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "pnpm run --parallel --filter @digitalkhatt/quran-engine --filter digitalkhatt-react dev",
+    "dev": "pnpm --filter digitalkhatt-react dev",
     "dev:angular": "pnpm --filter digitalkhatt start",
-    "dev:react": "pnpm run --parallel --filter @digitalkhatt/quran-engine --filter digitalkhatt-react dev",
-    "dev:engine": "pnpm --filter @digitalkhatt/quran-engine dev",
+    "dev:react": "pnpm --filter digitalkhatt-react dev",
     "build": "pnpm --filter @digitalkhatt/quran-engine build && pnpm -r --filter=!@digitalkhatt/quran-engine build",
     "build:angular": "pnpm --filter digitalkhatt build",
     "build:react": "pnpm --filter digitalkhatt-react build",

@@ -82,7 +82,7 @@ export class PageViewer implements BufferableView {
   private lastDrawTime: number = 0;
   private zoomLayer: HTMLElement | null = null;
   /** Word elements for hit testing (CSS renderer only) */
-  private wordElements: Map<string, HTMLElement> | null = null;
+  private wordElements: Map<string, Element> | null = null;
 
   /**
    * Create a new PageViewer
@@ -178,8 +178,8 @@ export class PageViewer implements BufferableView {
       };
       const result = svgRenderer.renderPage(this.pageIndex, this.viewport, svgOptions);
       lineElements = result.lineElements;
-      // SVG renderer also returns word elements (as SVGElement, but compatible)
-      this.wordElements = result.wordElements as Map<string, HTMLElement> | undefined ?? null;
+      // SVG renderer returns word elements as SVGElement
+      this.wordElements = result.wordElements as Map<string, Element> | undefined ?? null;
     } else {
       const cssRenderer = this.renderer as CSSPageRenderer;
       const cssOptions: CSSPageRenderOptions = {
@@ -289,9 +289,9 @@ export class PageViewer implements BufferableView {
   }
 
   /**
-   * Get word elements for hit testing (CSS renderer only)
+   * Get word elements for hit testing
    */
-  getWordElements(): Map<string, HTMLElement> | null {
+  getWordElements(): Map<string, Element> | null {
     return this.wordElements;
   }
 

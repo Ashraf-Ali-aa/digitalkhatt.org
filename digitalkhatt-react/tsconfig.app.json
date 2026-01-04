@@ -7,6 +7,7 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "baseUrl": ".",
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -22,7 +23,13 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* Path aliases for direct source imports */
+    "paths": {
+      "@digitalkhatt/quran-engine": ["../packages/quran-engine/src/index.ts"],
+      "@digitalkhatt/quran-engine/*": ["../packages/quran-engine/src/*"]
+    }
   },
   "include": ["src"]
 }

@@ -545,7 +545,7 @@ export class SVGPageRenderer {
    * Apply highlights to word elements
    */
   applyHighlights(
-    wordElements: Map<string, HTMLElement>,
+    wordElements: Map<string, Element>,
     highlightGroups: SVGHighlightGroup[],
     pageIndex: number
   ): void {
@@ -553,8 +553,8 @@ export class SVGPageRenderer {
     for (const [, element] of wordElements) {
       // For SVG rect elements, reset fill
       if (element instanceof SVGElement) {
-        (element as SVGElement).style.fill = '';
-        (element as SVGElement).classList.remove('highlighted');
+        element.style.fill = '';
+        element.classList.remove('highlighted');
       }
     }
 
@@ -566,8 +566,8 @@ export class SVGPageRenderer {
             const key = `${word.page}:${word.line}:${word.word}`;
             const element = wordElements.get(key);
             if (element && element instanceof SVGElement) {
-              (element as SVGElement).style.fill = group.color;
-              (element as SVGElement).classList.add('highlighted');
+              element.style.fill = group.color;
+              element.classList.add('highlighted');
             }
           }
         }

@@ -7,7 +7,7 @@
 
 import type { HBFeature, GlyphInformation, HarfBuzzDirection } from './types';
 
-// @ts-expect-error - harfbuzzjs doesn't have types
+// @ts-ignore - harfbuzzjs module type definition
 import * as hbjs from 'harfbuzzjs/hb.js';
 
 type Pointer = number;

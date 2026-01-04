@@ -6,8 +6,8 @@
     "outDir": "./out-tsc/app",
     "types": [],
     "paths": {
-      "@digitalkhatt/quran-engine": ["node_modules/@digitalkhatt/quran-engine/dist/index"],
-      "@digitalkhatt/quran-engine/*": ["node_modules/@digitalkhatt/quran-engine/dist/*"]
+      "@digitalkhatt/quran-engine": ["../packages/quran-engine/src/index.ts"],
+      "@digitalkhatt/quran-engine/*": ["../packages/quran-engine/src/*"]
     }
   },
   "files": [

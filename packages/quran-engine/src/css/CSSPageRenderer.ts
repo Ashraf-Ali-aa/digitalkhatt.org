@@ -308,13 +308,15 @@ export class CSSPageRenderer {
    * Apply highlights to word elements
    */
   applyHighlights(
-    wordElements: Map<string, HTMLElement>,
+    wordElements: Map<string, Element>,
     highlightGroups: CSSHighlightGroup[],
     pageIndex: number
   ): void {
     // Clear existing highlights
     for (const [, element] of wordElements) {
-      element.style.backgroundColor = '';
+      if (element instanceof HTMLElement) {
+        element.style.backgroundColor = '';
+      }
       element.classList.remove('highlighted');
     }
 
@@ -326,7 +328,9 @@ export class CSSPageRenderer {
             const key = `${word.page}:${word.line}:${word.word}`;
             const element = wordElements.get(key);
             if (element) {
-              element.style.backgroundColor = group.color;
+              if (element instanceof HTMLElement) {
+                element.style.backgroundColor = group.color;
+              }
               element.classList.add('highlighted');
             }
           }
