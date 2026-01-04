@@ -66,6 +66,34 @@ function isArabicIndicDigit(charCode: number): boolean {
   return charCode >= ARABIC_INDIC_ZERO && charCode <= ARABIC_INDIC_NINE;
 }
 
+/**
+ * Check if a word is an ayah marker (contains END_OF_AYAH character or is just digits)
+ */
+export function isAyahMarker(text: string): boolean {
+  // Check if text contains END_OF_AYAH marker (۝)
+  if (text.includes(String.fromCharCode(END_OF_AYAH))) return true;
+
+  // Check if the word is primarily Arabic-Indic digits (verse number)
+  // This handles cases where the marker might be just the number
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return false;
+
+  // Check if ends with Arabic-Indic digit (common pattern for ayah markers)
+  const lastChar = trimmed.charCodeAt(trimmed.length - 1);
+  if (isArabicIndicDigit(lastChar)) {
+    // Verify it's a number-only word (not a word ending in a digit)
+    for (let i = 0; i < trimmed.length; i++) {
+      const charCode = trimmed.charCodeAt(i);
+      if (!isArabicIndicDigit(charCode) && charCode !== END_OF_AYAH) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
 function arabicIndicToNumber(charCode: number): number {
   return charCode - ARABIC_INDIC_ZERO;
 }

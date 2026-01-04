@@ -30,7 +30,7 @@ import {
   type CSSWordClickInfo,
 } from "@digitalkhatt/quran-engine"
 import { MushafLayoutType, NewMadinahQuranTextService, OldMadinahQuranTextService, QuranTextIndopak15Service, QuranTextService, MUSHAFLAYOUTTYPE } from '../../services/qurantext.service';
-import { VerseMappingService, VerseRef, WordClickInfo, VerseClickInfo, HighlightGroup } from '../../services/verse-mapping.service';
+import { VerseMappingService, VerseRef, WordClickInfo, VerseClickInfo, HighlightGroup, isAyahMarker } from '../../services/verse-mapping.service';
 import { TajweedService } from '../../services/tajweed.service';
 import { saveAs } from 'file-saver-es';
 import { commonModules } from '../../app.config';
@@ -1158,18 +1158,19 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
     this.ngZone.run(() => {
       console.log('Word clicked:', wordClickInfo);
 
-      // Emit events (can be extended with @Output EventEmitters)
-      this.onWordClick(wordClickInfo);
-
-      // If we have verse info, also trigger verse click
-      if (verseRef) {
-        const verseClickInfo: VerseClickInfo = {
-          surah: verseRef.surah,
-          ayah: verseRef.ayah,
-          pageNumber: info.pageIndex + 1,
-        };
-        this.onVerseClick(verseClickInfo);
+      // Check if clicked word is an ayah marker
+      if (isAyahMarker(info.text)) {
+        // Highlight entire verse for ayah marker clicks
+        if (verseRef) {
+          this.highlightVerse(verseRef.surah, verseRef.ayah);
+        }
+      } else {
+        // Highlight just this word for regular word clicks
+        this.highlightWord(info.pageIndex, info.lineIndex, info.wordIndex);
       }
+
+      // Emit word click event
+      this.onWordClick(wordClickInfo);
     });
   }
 
@@ -1212,6 +1213,20 @@ export class OTFMushafComponent implements OnInit, AfterViewInit, OnDestroy {
     this.highlightGroups = [{
       verses: [{ surah, ayah }],
       words: words,
+      color,
+    }];
+
+    // Apply highlights to visible pages
+    this.applyHighlightsToVisiblePages();
+  }
+
+  /**
+   * Highlight a single word
+   */
+  highlightWord(pageIndex: number, lineIndex: number, wordIndex: number, color: string = 'rgba(255, 255, 0, 0.3)'): void {
+    // Update highlight groups with just this word
+    this.highlightGroups = [{
+      words: [{ page: pageIndex, line: lineIndex, word: wordIndex }],
       color,
     }];
 
