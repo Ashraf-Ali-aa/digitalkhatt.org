@@ -6,8 +6,8 @@
  * Now uses SVG rendering via @digitalkhatt/quran-engine.
  */
 
-// Import CSS styles
-import './styles/svg-renderer.css';
+// Import CSS styles from quran-engine
+import '@digitalkhatt/quran-engine/styles/svg-renderer.css';
 
 // ============================================
 // Core Types - Re-export from quran-engine

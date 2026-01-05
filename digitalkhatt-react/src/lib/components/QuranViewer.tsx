@@ -34,8 +34,12 @@ export interface QuranViewerProps {
   minScale?: number;
   /** Maximum scale factor */
   maxScale?: number;
-  /** Initial scale */
+  /** Initial scale (used if scale prop is not provided) */
   initialScale?: number;
+  /** Controlled scale (overrides internal state when provided) */
+  scale?: number;
+  /** Called when scale changes (for controlled mode) */
+  onScaleChange?: (scale: number) => void;
   /** Enable pinch zoom on touch devices */
   enablePinchZoom?: boolean;
 
@@ -94,6 +98,8 @@ export function QuranViewer({
   minScale = 0.5,
   maxScale = 3,
   initialScale = 1,
+  scale: controlledScale,
+  onScaleChange,
   enablePinchZoom = true,
   onPageChange,
   tajweedEnabled = true,
@@ -112,9 +118,19 @@ export function QuranViewer({
   style,
 }: QuranViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(initialScale);
+  const [internalScale, setInternalScale] = useState(initialScale);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 0 });
+
+  // Use controlled scale if provided, otherwise use internal state
+  const scale = controlledScale ?? internalScale;
+  const setScale = (newScale: number) => {
+    if (onScaleChange) {
+      onScaleChange(newScale);
+    } else {
+      setInternalScale(newScale);
+    }
+  };
 
   const { isReady, getTextService } = useDigitalKhatt();
   const textService = useMemo(

@@ -19,8 +19,7 @@ import type { SVGWordClickInfo, SVGHighlightGroup, VerseNumberFormat } from '@di
 import { JustStyleEnum, getWordsForVerse } from '@digitalkhatt/quran-engine';
 import { AyaGlyph, getAyaSvgGroup } from './AyaGlyph';
 
-// Import CSS styles for tajweed
-import '../styles/svg-renderer.css';
+// Note: CSS styles are imported in lib/index.ts from @digitalkhatt/quran-engine/styles/svg-renderer.css
 
 // ============================================
 // Types
@@ -381,7 +380,7 @@ export function QuranPage({
 
   return (
     <div
-      className={`quran-page ${className || ''}`}
+      className={`quran-page layout-${layoutType} ${className || ''}`}
       style={{
         position: 'relative',
         width: viewport.width,

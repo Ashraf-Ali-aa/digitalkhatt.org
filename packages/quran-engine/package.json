@@ -38,10 +38,12 @@
         "types": "./dist/wrappers/angular/index.d.ts",
         "default": "./dist/wrappers/angular/index.js"
       }
-    }
+    },
+    "./styles/svg-renderer.css": "./src/styles/svg-renderer.css"
   },
   "files": [
     "dist",
+    "src/styles",
     "README.md"
   ],
   "scripts": {
